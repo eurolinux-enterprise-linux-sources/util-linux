@@ -1,7 +1,7 @@
-From b5d9bfe34e62cf1c57646efa0bd72ecad7d98258 Mon Sep 17 00:00:00 2001
+From 0ade71743e5f96fbdb0f4a85c3eef22b88363f13 Mon Sep 17 00:00:00 2001
 From: Nate Clark <nate@neworld.us>
 Date: Wed, 4 Jan 2017 15:24:32 -0500
-Subject: [PATCH 176/176] libblkid/minix: Use same checks for version 3
+Subject: [PATCH 152/152] libblkid/minix: Use same checks for version 3
 
 fsck.minix performs the same sanity checks on all versions of the
 superblock. Update the probe to perform the same sanity checks so it is

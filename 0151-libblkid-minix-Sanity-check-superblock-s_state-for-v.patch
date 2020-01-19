@@ -1,7 +1,7 @@
-From 6eb3a6579768458c13c26958e1cc3fbffe2ada70 Mon Sep 17 00:00:00 2001
+From 289f0cd75f168f86702913658ebe2dbfd8e987c6 Mon Sep 17 00:00:00 2001
 From: Nate Clark <nate@neworld.us>
 Date: Wed, 4 Jan 2017 15:21:17 -0500
-Subject: [PATCH 175/176] libblkid/minix: Sanity check superblock s_state for v
+Subject: [PATCH 151/152] libblkid/minix: Sanity check superblock s_state for v
  1 and 2
 
 Swap devices with specific values in the uuid can look like minix

@@ -1,7 +1,7 @@
-From b4d5cf4819023ce07ecd39729cdd4cde8b59ca35 Mon Sep 17 00:00:00 2001
+From 4ce5726c0ed93e7607c5076f587546c32cf83c2f Mon Sep 17 00:00:00 2001
 From: Nate Clark <nate@neworld.us>
 Date: Wed, 4 Jan 2017 15:24:22 -0500
-Subject: [PATCH 174/176] libblkid/minix: Match minix superblock types
+Subject: [PATCH 150/152] libblkid/minix: Match minix superblock types
 
 All of the types in the minix super block are unsigned but in
 probe_minix they were being treated as signed. This would cause some of
