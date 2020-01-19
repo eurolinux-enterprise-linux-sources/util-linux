@@ -1,0 +1,44 @@
+From e10a3a201b2b4dc6ff9957600c9bf67a2f9de38e Mon Sep 17 00:00:00 2001
+From: Anton Blanchard <anton@samba.org>
+Date: Mon, 7 Apr 2014 09:18:13 +1000
+Subject: [PATCH 158/173] setarch: Fix ppc64le architectures
+
+setarch currently fails on ppc64le because it tries to
+use big endian architecture names. Fix it.
+
+Addresses: https://bugzilla.redhat.com/show_bug.cgi?id=1562125
+Upstream: http://github.com/karelzak/util-linux/commit/95bf26fd68ec7f0b2dde1f022dc79d04d1a6e620
+Upstream: http://github.com/karelzak/util-linux/commit/e60b6df54e27cdb68a75ea8a056a70f60df8f025
+Signed-off-by: Anton Blanchard <anton@samba.org>
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ sys-utils/setarch.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/sys-utils/setarch.c b/sys-utils/setarch.c
+index 051cbefcd..b03406dd3 100644
+--- a/sys-utils/setarch.c
++++ b/sys-utils/setarch.c
+@@ -149,11 +149,19 @@ set_arch(const char *pers, unsigned long options, int list)
+     {PER_LINUX32, "linux32", NULL},
+     {PER_LINUX, "linux64", NULL},
+ #if defined(__powerpc__) || defined(__powerpc64__)
++#ifdef __BIG_ENDIAN__
+     {PER_LINUX32, "ppc32", "ppc"},
+     {PER_LINUX32, "ppc", "ppc"},
+     {PER_LINUX, "ppc64", "ppc64"},
+     {PER_LINUX, "ppc64pseries", "ppc64"},
+     {PER_LINUX, "ppc64iseries", "ppc64"},
++#else
++    {PER_LINUX32, "ppc32",  "ppcle"},
++    {PER_LINUX32, "ppc",    "ppcle"},
++    {PER_LINUX32, "ppc32le", "ppcle"},
++    {PER_LINUX32, "ppcle", "ppcle"},
++    {PER_LINUX, "ppc64le", "ppc64le"},
++#endif
+ #endif
+ #if defined(__x86_64__) || defined(__i386__) || defined(__ia64__)
+     {PER_LINUX32, "i386", "i386"},
+-- 
+2.14.4
+

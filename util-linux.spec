@@ -2,7 +2,7 @@
 Summary: A collection of basic system utilities
 Name: util-linux
 Version: 2.23.2
-Release: 52%{?dist}.1
+Release: 59%{?dist}
 License: GPLv2 and GPLv2+ and LGPLv2+ and BSD with advertising and Public Domain
 Group: System Environment/Base
 URL: http://en.wikipedia.org/wiki/Util-linux
@@ -77,6 +77,7 @@ Requires: audit-libs >= 1.0.6
 Requires: libuuid = %{version}-%{release}
 Requires: libblkid = %{version}-%{release}
 Requires: libmount = %{version}-%{release}
+Requires: libsmartcols = %{version}-%{release}
 
 ### Ready for upstream?
 ###
@@ -387,19 +388,80 @@ Patch148: 0148-mkswap-tolerate-ENOTSUP-when-failing-to-relabel.patch
 Patch149: 0149-libmount-fix-debug-message.patch
 
 #
-# RHEL7.5.Z
+# RHEL7.6
 #
+# 1543428 - update lsns
+Patch150: 0150-lsns-missing-ns-name-is-not-error.patch
+Patch151: 0151-lsns-Fix-parser-for-proc-pid-stat-which-is-including.patch
+# 1561350 - provide libsmartcols and libsmartcols-devel libraries
+Patch152: 0152-libsmartcols-add-basic-tools-necessary-for-new-versi.patch
+Patch153: 0153-libsmartcols-backport-upstream-version-v2.32-158-gc0.patch
+Patch154: 0154-tests-backport-libsmartcols-tests.patch
+# 1581611 - lslogins never shows lock passwords as PWD-LOCK
+Patch155: 0155-lslogins-fix-password-verification.patch
+# 1566674 - [RFE] Add warnings that have to be acknowledged to the -l flag in umount or remove the option
+Patch156: 0156-umount-add-note-about-lazy.patch
+# 1566390 - [RHEL-7.5] losetup can not detach all loop devices
+Patch157: 0157-losetup-add-info-about-lazy-detach-to-manpage.patch
+# 1562125 - "setarch ppc<*>" fails with "Unrecognized architecture"
+Patch158: 0158-setarch-Fix-ppc64le-architectures.patch
+# 1528567 - [RFE] Provide 'dig-holes' functionality for fallocate
+Patch159: 0159-fallocate-backport-v2.32-164-g641af90dc.patch
+# 1528959 - rbind creates duplicate entries in /proc/mounts
+Patch160: 0160-libmount-fix-mnt_table_is_fs_mounted-for-rbind.patch
+# 1538721 - mount man page says sync option has no effect for ext4
+Patch161: 0161-mount-add-ext4-to-some-places-in-man-page.patch
+# 1252764 - icrnl is not set when autologin is used
+Patch162: 0162-agetty-keep-c_iflags-unmodified-on-autologin.patch
+# 1561200 - [RFE] - sulogin: improve support for locked root account
+Patch163: 0163-sulogin-don-t-use-strcpy-enlarge-pwd-line-buffer.patch
+Patch164: 0164-sulogin-improve-support-for-locked-root-account.patch
+Patch165: 0165-sulogin-Always-make-echo-work-after-performing-getpa.patch
+Patch166: 0166-sulogin-make-getpasswd-.-return-NULL-on-D.patch
+Patch167: 0167-sulogin-bail-out-from-getpasswd-.-on-timeout.patch
+# 1566432 - [RHEL-7.5] losetup: /dev/loop1: failed to set up loop device
+Patch168: 0168-losetup-keep-f-and-devname-mutually-exclusive.patch
+# 1579439 - RHEL 7.5 - lscpu shows wrong sockets, threads on max config (32TB) POWER8 machine (util-linux)
+Patch169: 0169-lscpu-fix-mzx-min-MHz-reporting.patch
+Patch170: 0170-chcpu-cleanup-return-codes.patch
+Patch171: 0171-chcpu-cleanup-stdout-stderr-usage.patch
+Patch172: 0172-lscpu-chcpu-Avoid-use-of-the-old-CPU-macros.patch
+Patch173: 0173-chcpu-Fix-maximal-number-of-CPUs.patch
 # 1594681 - [RHEL7.2] blkid does not output swap area
-Patch150: 0150-libblkid-minix-Match-minix-superblock-types.patch
-Patch151: 0151-libblkid-minix-Sanity-check-superblock-s_state-for-v.patch
-Patch152: 0152-libblkid-minix-Use-same-checks-for-version-3.patch
-
+Patch174: 0174-libblkid-minix-Match-minix-superblock-types.patch
+Patch175: 0175-libblkid-minix-Sanity-check-superblock-s_state-for-v.patch
+Patch176: 0176-libblkid-minix-Use-same-checks-for-version-3.patch
+# 1618711 - exec option in mount unable to override the implicit noexec in user option
+Patch177: 0177-mount-append-inverting-options-for-mount.-type-on-us.patch
+# 1616264 - Login to emergency shell failed
+Patch178: 0178-sulogin-backport-RHEL-8-version.patch
 
 %description
 The util-linux package contains a large variety of low-level system
 utilities that are necessary for a Linux system to function. Among
 others, Util-linux contains the fdisk configuration tool and the login
 program.
+
+%package -n libsmartcols
+Summary: Formatting library for ls-like programs.
+Group: Development/Libraries
+License: LGPLv2+
+
+%description -n libsmartcols
+This is library for ls-like terminal programs, part of util-linux.
+
+
+%package -n libsmartcols-devel
+Summary: Formatting library for ls-like programs.
+Group: Development/Libraries
+License: LGPLv2+
+Requires: libsmartcols = %{version}-%{release}
+Requires: pkgconfig
+
+%description -n libsmartcols-devel
+This is development library and headers for ls-like terminal programs,
+part of util-linux.
+
 
 %package -n libmount
 Summary: Device mounting library
@@ -653,7 +715,7 @@ rmdir ${RPM_BUILD_ROOT}%{_datadir}/getopt
 ln -sf ../proc/self/mounts %{buildroot}/etc/mtab
 
 # remove static libs
-rm -f $RPM_BUILD_ROOT%{_libdir}/lib{uuid,blkid,mount}.a
+rm -f $RPM_BUILD_ROOT%{_libdir}/lib{uuid,blkid,mount,smartcols}.a
 
 # find MO files
 %find_lang %name
@@ -711,6 +773,9 @@ done
 
 %post -n libmount -p /sbin/ldconfig
 %postun -n libmount -p /sbin/ldconfig
+
+%post -n libsmartcols -p /sbin/ldconfig
+%postun -n libsmartcols -p /sbin/ldconfig
 
 %pre -n uuidd
 getent group uuidd >/dev/null || groupadd -r uuidd
@@ -1075,6 +1140,18 @@ fi
 %{compldir}/uuidd
 
 
+%files -n libsmartcols
+%defattr(-,root,root)
+%doc libsmartcols/COPYING
+%{_libdir}/libsmartcols.so.*
+
+%files -n libsmartcols-devel
+%defattr(-,root,root)
+%{_libdir}/libsmartcols.so
+%{_includedir}/libsmartcols
+%{_libdir}/pkgconfig/smartcols.pc
+
+
 %files -n libmount
 %defattr(-,root,root)
 %doc libmount/COPYING
@@ -1127,8 +1204,38 @@ fi
 %{_libdir}/pkgconfig/uuid.pc
 
 %changelog
-* Thu Jul 12 2018 Karel Zak <kzak@redhat.com> 2.23.2-52.el7_5.1
-- fix #1594681 - blkid does not output swap area
+* Mon Aug 20 2018 Karel Zak <kzak@redhat.com> 2.23.2-59
+- fix #1618711 - exec option in mount unable to override the implicit noexec in user option
+- fix #1616264 - Login to emergency shell failed
+
+* Wed Jul 04 2018 Karel Zak <kzak@redhat.com> 2.23.2-58
+- fix #1594681 - [RHEL7.2] blkid does not output swap area
+
+* Thu Jun 14 2018 Karel Zak <kzak@redhat.com> 2.23.2-57
+- add another ppc aliases to setarch (#1562125)
+
+* Wed Jun 13 2018 Karel Zak <kzak@redhat.com> 2.23.2-56
+- backport another chcpu patches for #1579439
+
+* Fri Jun 08 2018 Karel Zak <kzak@redhat.com> 2.23.2-55
+- improve fallocate patch backward compatibility (#1528567)
+
+* Thu Jun 07 2018 Karel Zak <kzak@redhat.com> 2.23.2-54
+- fix #1581611 - lslogins never shows lock passwords as PWD-LOCK
+- fix #1579439 - RHEL 7.5 - lscpu shows wrong sockets, threads on max config (32TB) POWER8 machine (util-linux)
+- fix #1566674 - [RFE] Add warnings that have to be acknowledged to the -l flag in umount or remove the option
+- fix #1566390 - [RHEL-7.5] losetup can not detach all loop devices
+- fix #1562125 - "setarch ppc<*>" fails with "Unrecognized architecture"
+- fix #1528567 - [RFE] Provide 'dig-holes' functionality for fallocate
+- fix #1528959 - rbind creates duplicate entries in /proc/mounts
+- fix #1538721 - mount man page says sync option has no effect for ext4
+- fix #1252764 - icrnl is not set when autologin is used
+- fix #1561200 - [RFE] - sulogin: improve support for locked root account
+- fix #1566432 - [RHEL-7.5] losetup: /dev/loop1: failed to set up loop device
+
+* Thu May 31 2018 Karel Zak <kzak@redhat.com> 2.23.2-53
+- fix #1543428 - update lsns
+- fix #1561350 - provide libsmartcols and libsmartcols-devel libraries
 
 * Fri Feb 02 2018 Karel Zak <kzak@redhat.com> 2.23.2-52
 - fix #1534893 - RHEL7: util-linux: mount/unmount ASLR bypass via environment variable in libmount

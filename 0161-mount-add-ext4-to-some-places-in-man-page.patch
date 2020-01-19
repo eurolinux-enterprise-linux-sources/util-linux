@@ -1,0 +1,54 @@
+From 7492cf62b7334792df931469ca783878b868d0d0 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Wed, 6 Jun 2018 12:10:42 +0200
+Subject: [PATCH 161/173] mount: add ext4 to some places in man page
+
+Addresses: http://bugzilla.redhat.com/show_bug.cgi?id=1538721
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ sys-utils/mount.8 | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/sys-utils/mount.8 b/sys-utils/mount.8
+index 49cb2818f..35d782f0e 100644
+--- a/sys-utils/mount.8
++++ b/sys-utils/mount.8
+@@ -874,7 +874,7 @@ for example tune2fs -l output for extN filesystems).
+ The following options apply to any filesystem that is being
+ mounted (but not every filesystem actually honors them - e.g., the
+ .B sync
+-option today has effect only for ext2, ext3, fat, vfat and ufs):
++option today has effect only for ext2, ext3, ext4, fat, vfat and ufs):
+ 
+ .TP
+ .B async
+@@ -909,7 +909,7 @@ The
+ .BR context=
+ option is useful when mounting filesystems that do not support
+ extended attributes, such as a floppy or hard disk formatted with VFAT, or
+-systems that are not normally running under SELinux, such as an ext3 formatted
++systems that are not normally running under SELinux, such as an ext3 or ext4 formatted
+ disk from a non-SELinux workstation. You can also use
+ .BR context=
+ on filesystems you do not trust, such as a floppy. It also helps in compatibility with
+@@ -2833,7 +2833,7 @@ not specified or the filesystem is known for libblkid, for example:
+ .sp
+ .B "mount /tmp/disk.img /mnt"
+ .sp
+-.B "mount -t ext3 /tmp/disk.img /mnt"
++.B "mount -t ext4 /tmp/disk.img /mnt"
+ .sp
+ .RE
+ This type of mount knows about four options, namely
+@@ -2948,7 +2948,7 @@ It is possible for a corrupted filesystem to cause a crash.
+ .PP
+ Some Linux filesystems don't support
+ .B "\-o sync and \-o dirsync"
+-(the ext2, ext3, fat and vfat filesystems
++(the ext2, ext3, ext4, fat and vfat filesystems
+ .I do
+ support synchronous updates (a la BSD) when mounted with the
+ .B sync
+-- 
+2.14.4
+

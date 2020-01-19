@@ -1,0 +1,31 @@
+From 0258872e2b45b589481e6796aa983f8749be9ada Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Thu, 10 Aug 2017 12:37:34 +0200
+Subject: [PATCH 157/173] losetup: add info about lazy detach to manpage
+
+Upstream: http://github.com/karelzak/util-linux/commit/60eedb0a53f14aa1169713a72325421db8e1c647
+Addresses: http://bugzilla.redhat.com/show_bug.cgi?id=1566390
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ sys-utils/losetup.8 | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/sys-utils/losetup.8 b/sys-utils/losetup.8
+index 9a8c1d597..45c220187 100644
+--- a/sys-utils/losetup.8
++++ b/sys-utils/losetup.8
+@@ -80,7 +80,10 @@ without --list) is deprecated.
+ .IP "\fB\-c, \-\-set-capacity\fP \fIloopdev\fP
+ force loop driver to reread size of the file associated with the specified loop device
+ .IP "\fB\-d, \-\-detach\fP \fIloopdev\fP..."
+-detach the file or device associated with the specified loop device(s)
++detach the file or device associated with the specified loop device(s). Note
++that since Linux v3.7 kernel uses "lazy device destruction".  The detach
++operation does not return EBUSY error anymore if device is actively used by
++system, but it is marked by autoclear flag and destroyed later.
+ .IP "\fB\-D, \-\-detach-all\fP"
+ detach all associated loop devices
+ .IP "\fB\-f, \-\-find\fP"
+-- 
+2.14.4
+

@@ -1,0 +1,38 @@
+From 971b2ecede4d2040e879d9cfb56332a2e210bed8 Mon Sep 17 00:00:00 2001
+From: Andreas Henriksson <andreas@fatal.se>
+Date: Mon, 28 Nov 2016 17:24:50 +0100
+Subject: [PATCH 167/173] sulogin: bail out from getpasswd(...) on timeout
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If timeout happens while waiting in prompt, bail out instead
+of retrying.
+
+Reported-by: Bjørn Mork <bjorn@mork.no>
+Addresses: http://bugs.debian.org/846107
+Upstream: http://github.com/karelzak/util-linux/commit/1c4b2d43926e2a7032310cd18b411d8d872cb4ed
+Addresses: http://bugzilla.redhat.com/show_bug.cgi?id=1561200
+Signed-off-by: Andreas Henriksson <andreas@fatal.se>
+---
+ login-utils/sulogin.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/login-utils/sulogin.c b/login-utils/sulogin.c
+index 7ec349953..dd73a1c50 100644
+--- a/login-utils/sulogin.c
++++ b/login-utils/sulogin.c
+@@ -611,6 +611,10 @@ static char *getpasswd(struct console *con)
+ 	while (cp->eol == '\0') {
+ 		if (read(fd, &c, 1) < 1) {
+ 			if (errno == EINTR || errno == EAGAIN) {
++				if (alarm_rised) {
++					ret = NULL;
++					goto quit;
++				}
+ 				usleep(1000);
+ 				continue;
+ 			}
+-- 
+2.14.4
+

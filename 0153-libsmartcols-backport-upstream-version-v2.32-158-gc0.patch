@@ -1,0 +1,6320 @@
+From fc6853caa0f3e4f8f10404e58f2dbf9f0df88bd4 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Thu, 31 May 2018 11:44:35 +0200
+Subject: [PATCH 153/173] libsmartcols: backport upstream version
+ v2.32-158-gc0bdff999
+
+Addresses: https://bugzilla.redhat.com/show_bug.cgi?id=1561350
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ Makefile.am                                 |    1 +
+ configure.ac                                |    3 -
+ libsmartcols/Makemodule.am                  |    3 +-
+ libsmartcols/docs/Makefile.am               |    4 +-
+ libsmartcols/docs/libsmartcols-docs.xml     |   28 +-
+ libsmartcols/docs/libsmartcols-sections.txt |   47 +-
+ libsmartcols/samples/Makemodule.am          |   37 +
+ libsmartcols/samples/continuous.c           |  138 +++
+ libsmartcols/samples/fromfile.c             |  344 +++++++
+ libsmartcols/samples/maxout.c               |   56 ++
+ libsmartcols/samples/title.c                |  135 +++
+ libsmartcols/{src/test.c => samples/tree.c} |   77 +-
+ libsmartcols/samples/wrap.c                 |  111 +++
+ libsmartcols/src/Makemodule.am              |   41 +-
+ libsmartcols/src/cell.c                     |  111 ++-
+ libsmartcols/src/column.c                   |  351 +++++--
+ libsmartcols/src/iter.c                     |    2 +-
+ libsmartcols/src/libsmartcols.h.in          |  156 +++-
+ libsmartcols/src/libsmartcols.sym           |   72 ++
+ libsmartcols/src/line.c                     |  173 ++--
+ libsmartcols/src/smartcolsP.h               |   70 +-
+ libsmartcols/src/symbols.c                  |  114 ++-
+ libsmartcols/src/table.c                    |  851 +++++++++++++----
+ libsmartcols/src/table_print.c              | 1342 ++++++++++++++++++++++-----
+ 24 files changed, 3530 insertions(+), 737 deletions(-)
+ create mode 100644 libsmartcols/samples/Makemodule.am
+ create mode 100644 libsmartcols/samples/continuous.c
+ create mode 100644 libsmartcols/samples/fromfile.c
+ create mode 100644 libsmartcols/samples/maxout.c
+ create mode 100644 libsmartcols/samples/title.c
+ rename libsmartcols/{src/test.c => samples/tree.c} (68%)
+ create mode 100644 libsmartcols/samples/wrap.c
+
+diff --git a/Makefile.am b/Makefile.am
+index 67464e4b2..7d5fa10e9 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -118,6 +118,7 @@ edit_cmd = sed \
+ 	 -e 's|@VERSION[@]|$(VERSION)|g' \
+ 	 -e 's|@LIBUUID_VERSION[@]|$(LIBUUID_VERSION)|g' \
+ 	 -e 's|@LIBMOUNT_VERSION[@]|$(LIBMOUNT_VERSION)|g' \
++	 -e 's|@LIBSMARTCOLS_VERSION[@]|$(LIBSMARTCOLS_VERSION)|g' \
+ 	 -e 's|@LIBBLKID_VERSION[@]|$(LIBBLKID_VERSION)|g'
+ 
+ CLEANFILES += $(PATHFILES)
+diff --git a/configure.ac b/configure.ac
+index 8cf317dc0..d561e01d0 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -133,9 +133,6 @@ AC_SUBST([BSD_WARN_CFLAGS])
+ dnl libtool-2
+ LT_INIT
+ 
+-dnl check supported linker flags
+-AX_CHECK_VSCRIPT
+-
+ m4_ifndef([PKG_PROG_PKG_CONFIG],
+   [m4_fatal([Could not locate the pkg-config autoconf
+     macros. These are usually located in /usr/share/aclocal/pkg.m4.
+diff --git a/libsmartcols/Makemodule.am b/libsmartcols/Makemodule.am
+index 0089712f1..012848b2b 100644
+--- a/libsmartcols/Makemodule.am
++++ b/libsmartcols/Makemodule.am
+@@ -1,13 +1,14 @@
+ if BUILD_LIBSMARTCOLS
+ 
+ include libsmartcols/src/Makemodule.am
++include libsmartcols/samples/Makemodule.am
+ 
+ if ENABLE_GTK_DOC
+ # Docs uses separate Makefiles
+ SUBDIRS += libsmartcols/docs
+ endif
+ 
+-# noinst for RHEL7: pkgconfig_DATA += libsmartcols/smartcols.pc
++pkgconfig_DATA += libsmartcols/smartcols.pc
+ PATHFILES      += libsmartcols/smartcols.pc
+ EXTRA_DIST     += libsmartcols/COPYING
+ 
+diff --git a/libsmartcols/docs/Makefile.am b/libsmartcols/docs/Makefile.am
+index c5aa2237c..e8a7600e9 100644
+--- a/libsmartcols/docs/Makefile.am
++++ b/libsmartcols/docs/Makefile.am
+@@ -32,7 +32,7 @@ SCAN_OPTIONS=
+ 
+ # Extra options to supply to gtkdoc-mkdb.
+ # e.g. MKDB_OPTIONS=--sgml-mode --output-format=xml
+-MKDB_OPTIONS=--sgml-mode --output-format=xml --name-space mnt
++MKDB_OPTIONS=--sgml-mode --output-format=xml --name-space scols
+ 
+ # Extra options to supply to gtkdoc-mktmpl
+ # e.g. MKTMPL_OPTIONS=--only-section-tmpl
+@@ -67,7 +67,7 @@ HTML_IMAGES=
+ # e.g. content_files=running.sgml building.sgml changes-2.0.sgml
+ content_files = $(builddir)/version.xml
+ 
+-# SGML files where gtk-doc abbrevations (#GtkWidget) are expanded
++# SGML files where gtk-doc abbreviations (#GtkWidget) are expanded
+ # These files must be listed here *and* in content_files
+ # e.g. expand_content_files=running.sgml
+ expand_content_files=
+diff --git a/libsmartcols/docs/libsmartcols-docs.xml b/libsmartcols/docs/libsmartcols-docs.xml
+index 4976ba701..02ee1ffe1 100644
+--- a/libsmartcols/docs/libsmartcols-docs.xml
++++ b/libsmartcols/docs/libsmartcols-docs.xml
+@@ -9,12 +9,12 @@
+     <title>libsmartcols Reference Manual</title>
+     <releaseinfo>for libsmartcols version &version;</releaseinfo>
+     <copyright>
+-      <year>2014</year>
++      <year>2014-2018</year>
+       <holder>Karel Zak &lt;kzak@redhat.com&gt;</holder>
+     </copyright>
+   </bookinfo>
+ 
+-  <part id="gtk">
++  <part id="overview">
+     <title>libsmartcols Overview</title>
+     <partintro>
+     <para>
+@@ -22,7 +22,7 @@ The libsmartcols library is used for smart adaptive formatting of tabular data.
+     </para>
+     <para>
+ The library is part of the util-linux package since version 2.25 and is
+-available from ftp://ftp.kernel.org/pub/linux/utils/util-linux/.
++available from https://www.kernel.org/pub/linux/utils/util-linux/.
+     </para>
+   </partintro>
+  </part>
+@@ -45,8 +45,28 @@ available from ftp://ftp.kernel.org/pub/linux/utils/util-linux/.
+     <xi:include href="xml/version-utils.xml"/>
+     <xi:include href="xml/init.xml"/>
+   </part>
+-  <index id="api-index-full">
++  <index id="api-index">
+     <title>API Index</title>
+     <xi:include href="xml/api-index-full.xml"><xi:fallback /></xi:include>
+   </index>
++  <index role="2.27">
++    <title>Index of new symbols in 2.27</title>
++    <xi:include href="xml/api-index-2.27.xml"><xi:fallback /></xi:include>
++  </index>
++  <index role="2.28">
++    <title>Index of new symbols in 2.28</title>
++    <xi:include href="xml/api-index-2.28.xml"><xi:fallback /></xi:include>
++  </index>
++  <index role="2.29">
++    <title>Index of new symbols in 2.29</title>
++    <xi:include href="xml/api-index-2.29.xml"><xi:fallback /></xi:include>
++  </index>
++  <index role="2.30">
++    <title>Index of new symbols in 2.30</title>
++    <xi:include href="xml/api-index-2.30.xml"><xi:fallback /></xi:include>
++  </index>
++  <index role="2.31">
++    <title>Index of new symbols in 2.31</title>
++    <xi:include href="xml/api-index-2.31.xml"><xi:fallback /></xi:include>
++  </index>
+ </book>
+diff --git a/libsmartcols/docs/libsmartcols-sections.txt b/libsmartcols/docs/libsmartcols-sections.txt
+index 2b8180c52..79786b544 100644
+--- a/libsmartcols/docs/libsmartcols-sections.txt
++++ b/libsmartcols/docs/libsmartcols-sections.txt
+@@ -2,12 +2,15 @@
+ <FILE>cell</FILE>
+ libscols_cell
+ scols_cell_copy_content
++scols_cell_get_alignment
+ scols_cell_get_color
+ scols_cell_get_data
++scols_cell_get_flags
+ scols_cell_get_userdata
+ scols_cell_refer_data
+ scols_cell_set_color
+ scols_cell_set_data
++scols_cell_set_flags
+ scols_cell_set_userdata
+ scols_cmpstr_cells
+ scols_reset_cell
+@@ -19,20 +22,32 @@ libscols_column
+ scols_column_get_color
+ scols_column_get_flags
+ scols_column_get_header
++scols_column_get_json_type
++scols_column_get_safechars
++scols_column_get_table
+ scols_column_get_whint
++scols_column_get_width
++scols_column_is_customwrap
++scols_column_is_hidden
+ scols_column_is_noextremes
+ scols_column_is_right
+ scols_column_is_strict_width
+ scols_column_is_tree
+ scols_column_is_trunc
++scols_column_is_wrap
+ scols_column_set_cmpfunc
+ scols_column_set_color
+ scols_column_set_flags
++scols_column_set_json_type
++scols_column_set_safechars
+ scols_column_set_whint
++scols_column_set_wrapfunc
+ scols_copy_column
+ scols_new_column
+ scols_ref_column
+ scols_unref_column
++scols_wrapnl_chunksize
++scols_wrapnl_nextchunk
+ </SECTION>
+ 
+ <SECTION>
+@@ -58,10 +73,13 @@ scols_line_get_ncells
+ scols_line_get_parent
+ scols_line_get_userdata
+ scols_line_has_children
++scols_line_is_ancestor
+ scols_line_next_child
++scols_line_refer_column_data
+ scols_line_refer_data
+ scols_line_remove_child
+ scols_line_set_color
++scols_line_set_column_data
+ scols_line_set_data
+ scols_line_set_userdata
+ scols_new_line
+@@ -78,6 +96,8 @@ scols_ref_symbols
+ scols_symbols_set_branch
+ scols_symbols_set_right
+ scols_symbols_set_vertical
++scols_symbols_set_title_padding
++scols_symbols_set_cell_padding
+ scols_unref_symbols
+ </SECTION>
+ 
+@@ -87,29 +107,48 @@ libscols_table
+ scols_copy_table
+ scols_new_table
+ scols_ref_table
++scols_sort_table
++scols_sort_table_by_tree
+ scols_table_add_column
+ scols_table_add_line
+ scols_table_colors_wanted
+ scols_table_enable_ascii
+ scols_table_enable_colors
++scols_table_enable_noencoding
+ scols_table_enable_export
++scols_table_enable_header_repeat
++scols_table_enable_json
+ scols_table_enable_maxout
+ scols_table_enable_noheadings
++scols_table_enable_nolinesep
++scols_table_enable_nowrap
+ scols_table_enable_raw
+ scols_table_get_column
+ scols_table_get_column_separator
+ scols_table_get_line
+ scols_table_get_line_separator
++scols_table_get_name
+ scols_table_get_ncols
+ scols_table_get_nlines
+ scols_table_get_stream
++scols_table_get_symbols
++scols_table_get_termforce
++scols_table_get_termheight
++scols_table_get_termwidth
++scols_table_get_title
+ scols_table_is_ascii
+ scols_table_is_empty
+ scols_table_is_export
++scols_table_is_header_repeat
++scols_table_is_json
+ scols_table_is_maxout
+ scols_table_is_noheadings
++scols_table_is_noencoding
++scols_table_is_nolinesep
++scols_table_is_nowrap
+ scols_table_is_raw
+ scols_table_is_tree
++scols_table_move_column
+ scols_table_new_column
+ scols_table_new_line
+ scols_table_next_column
+@@ -120,10 +159,14 @@ scols_table_remove_columns
+ scols_table_remove_line
+ scols_table_remove_lines
+ scols_table_set_column_separator
++scols_table_set_default_symbols
+ scols_table_set_line_separator
++scols_table_set_name
+ scols_table_set_stream
+ scols_table_set_symbols
+-scols_sort_table
++scols_table_set_termforce
++scols_table_set_termheight
++scols_table_set_termwidth
+ scols_unref_table
+ </SECTION>
+ 
+@@ -131,6 +174,8 @@ scols_unref_table
+ <FILE>table_print</FILE>
+ scols_print_table
+ scols_print_table_to_string
++scols_table_print_range
++scols_table_print_range_to_string
+ </SECTION>
+ 
+ <SECTION>
+diff --git a/libsmartcols/samples/Makemodule.am b/libsmartcols/samples/Makemodule.am
+new file mode 100644
+index 000000000..0e0208f04
+--- /dev/null
++++ b/libsmartcols/samples/Makemodule.am
+@@ -0,0 +1,37 @@
++
++check_PROGRAMS += \
++	sample-scols-title \
++	sample-scols-wrap \
++	sample-scols-continuous \
++	sample-scols-fromfile \
++	sample-scols-maxout
++
++sample_scols_cflags = $(AM_CFLAGS) $(NO_UNUSED_WARN_CFLAGS) \
++                      -I$(ul_libsmartcols_incdir)
++sample_scols_ldadd = libsmartcols.la $(LDADD)
++
++check_PROGRAMS += sample-scols-tree
++sample_scols_tree_SOURCES = libsmartcols/samples/tree.c
++sample_scols_tree_LDADD = $(sample_scols_ldadd) libcommon.la
++sample_scols_tree_CFLAGS = $(sample_scols_cflags)
++
++sample_scols_title_SOURCES = libsmartcols/samples/title.c
++sample_scols_title_LDADD = $(sample_scols_ldadd) libcommon.la
++sample_scols_title_CFLAGS = $(sample_scols_cflags)
++
++sample_scols_wrap_SOURCES = libsmartcols/samples/wrap.c
++sample_scols_wrap_LDADD = $(sample_scols_ldadd)
++sample_scols_wrap_CFLAGS = $(sample_scols_cflags)
++
++sample_scols_continuous_SOURCES = libsmartcols/samples/continuous.c
++sample_scols_continuous_LDADD = $(sample_scols_ldadd) libcommon.la
++sample_scols_continuous_CFLAGS = $(sample_scols_cflags)
++
++sample_scols_maxout_SOURCES = libsmartcols/samples/maxout.c
++sample_scols_maxout_LDADD = $(sample_scols_ldadd)
++sample_scols_maxout_CFLAGS = $(sample_scols_cflags)
++
++sample_scols_fromfile_SOURCES = libsmartcols/samples/fromfile.c
++sample_scols_fromfile_LDADD = $(sample_scols_ldadd) libcommon.la
++sample_scols_fromfile_CFLAGS = $(sample_scols_cflags)
++
+diff --git a/libsmartcols/samples/continuous.c b/libsmartcols/samples/continuous.c
+new file mode 100644
+index 000000000..8f9d13e6b
+--- /dev/null
++++ b/libsmartcols/samples/continuous.c
+@@ -0,0 +1,138 @@
++/*
++ * Copyright (C) 2016 Karel Zak <kzak@redhat.com>
++ *
++ * This file may be redistributed under the terms of the
++ * GNU Lesser General Public License.
++ */
++#include <stdlib.h>
++#include <unistd.h>
++#include <string.h>
++#include <errno.h>
++#include <sys/types.h>
++#include <sys/time.h>
++
++#include "c.h"
++#include "nls.h"
++#include "strutils.h"
++#include "xalloc.h"
++
++#include "libsmartcols.h"
++
++#define TIME_PERIOD	3.0	/* seconds */
++
++enum { COL_NUM, COL_DATA, COL_TIME };
++
++static double time_diff(struct timeval *a, struct timeval *b)
++{
++	return (a->tv_sec - b->tv_sec) + (a->tv_usec - b->tv_usec) / 1E6;
++}
++
++/* add columns to the @tb */
++static void setup_columns(struct libscols_table *tb)
++{
++	scols_table_enable_maxout(tb, 1);
++	if (!scols_table_new_column(tb, "#NUM", 0.1, SCOLS_FL_RIGHT))
++		goto fail;
++	if (!scols_table_new_column(tb, "DATA", 0.7, 0))
++		goto fail;
++	if (!scols_table_new_column(tb, "TIME", 0.2, 0))
++		goto fail;
++	return;
++fail:
++	scols_unref_table(tb);
++	err(EXIT_FAILURE, "failed to create output columns");
++}
++
++static struct libscols_line *add_line(struct libscols_table *tb, size_t i)
++{
++	char *p;
++	struct libscols_line *ln = scols_table_new_line(tb, NULL);
++
++	if (!ln)
++		err(EXIT_FAILURE, "failed to create output line");
++
++	xasprintf(&p, "%zu", i);
++	if (scols_line_refer_data(ln, COL_NUM, p))
++		goto fail;
++
++	xasprintf(&p, "data-%02zu-%02zu-%02zu-end", i + 1, i + 2, i + 3);
++	if (scols_line_refer_data(ln, COL_DATA, p))
++		goto fail;
++
++	return ln;
++fail:
++	scols_unref_table(tb);
++	err(EXIT_FAILURE, "failed to create output line");
++}
++
++int main(int argc, char *argv[])
++{
++	struct libscols_table *tb;
++	size_t i;
++	struct timeval last;
++
++	scols_init_debug(0);
++
++	tb = scols_new_table();
++	if (!tb)
++		err(EXIT_FAILURE, "failed to create output table");
++
++	setup_columns(tb);
++	gettimeofday(&last, NULL);
++
++	for (i = 0; i < 10; i++) {
++		struct libscols_line *line;
++		struct timeval now;
++		int done = 0;
++		char *timecell = xmalloc( sizeof(stringify_value(UINT_MAX)) );
++
++		line = add_line(tb, i);
++
++		/* Make a reference from cell data to the buffer, then we can
++		 * update cell data without any interaction with libsmartcols
++		 */
++		scols_line_refer_data(line, COL_TIME, timecell);
++
++		do {
++			double diff;
++
++			gettimeofday(&now, NULL);
++			diff = time_diff(&now, &last);
++
++			if (now.tv_sec == last.tv_sec + (long) TIME_PERIOD)
++				done = 1;
++			else
++				usleep(100000);
++
++			/* update "TIME" cell data */
++			sprintf(timecell, "%f [%3d%%]", diff,
++				done ? 100 : (int)(diff / (TIME_PERIOD / 100.0)));
++
++			/* Note that libsmartcols don't print \n for last line
++			 * in the table, but if you print a line somewhere in
++			 * the midle of the table you need
++			 *
++			 *    scols_table_enable_nolinesep(tb, !done);
++			 *
++			 * to disable line breaks. In this example it's
++			 * unnecessary as we print the latest line only.
++			 */
++
++			/* print the line */
++			scols_table_print_range(tb, line, NULL);
++
++			if (!done) {
++				/* terminal is waiting for \n, fflush() to force output */
++				fflush(scols_table_get_stream(tb));
++				/* move to the begin of the line */
++				fputc('\r', scols_table_get_stream(tb));
++			} else
++				fputc('\n', scols_table_get_stream(tb));
++		} while (!done);
++
++		last = now;
++	}
++
++	scols_unref_table(tb);
++	return EXIT_SUCCESS;
++}
+diff --git a/libsmartcols/samples/fromfile.c b/libsmartcols/samples/fromfile.c
+new file mode 100644
+index 000000000..c1ab728fd
+--- /dev/null
++++ b/libsmartcols/samples/fromfile.c
+@@ -0,0 +1,344 @@
++/*
++ * Copyright (C) 2016 Karel Zak <kzak@redhat.com>
++ *
++ * This file may be redistributed under the terms of the
++ * GNU Lesser General Public License.
++ */
++#include <stdlib.h>
++#include <unistd.h>
++#include <string.h>
++#include <errno.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <dirent.h>
++#include <getopt.h>
++
++#include "c.h"
++#include "nls.h"
++#include "strutils.h"
++#include "xalloc.h"
++#include "optutils.h"
++
++#include "libsmartcols.h"
++
++struct column_flag {
++	const char *name;
++	int mask;
++};
++
++static const struct column_flag flags[] = {
++	{ "trunc",	SCOLS_FL_TRUNC },
++	{ "tree",	SCOLS_FL_TREE },
++	{ "right",	SCOLS_FL_RIGHT },
++	{ "strictwidth",SCOLS_FL_STRICTWIDTH },
++	{ "noextremes", SCOLS_FL_NOEXTREMES },
++	{ "hidden",	SCOLS_FL_HIDDEN },
++	{ "wrap",	SCOLS_FL_WRAP },
++	{ "wrapnl",	SCOLS_FL_WRAP },
++	{ "none",	0 }
++};
++
++static long name_to_flag(const char *name, size_t namesz)
++{
++	size_t i;
++
++	for (i = 0; i < ARRAY_SIZE(flags); i++) {
++		const char *cn = flags[i].name;
++
++		if (!strncasecmp(name, cn, namesz) && !*(cn + namesz))
++			return flags[i].mask;
++	}
++	warnx("unknown flag: %s", name);
++	return -1;
++}
++
++static int parse_column_flags(char *str)
++{
++	unsigned long num_flags = 0;
++
++	if (string_to_bitmask(str, &num_flags, name_to_flag))
++		err(EXIT_FAILURE, "failed to parse column flags");
++
++	return num_flags;
++}
++
++static struct libscols_column *parse_column(FILE *f)
++{
++	size_t len = 0;
++	char *line = NULL;
++	int nlines = 0;
++
++	struct libscols_column *cl = NULL;
++
++	while (getline(&line, &len, f) != -1) {
++
++		char *p = strrchr(line, '\n');
++		if (p)
++			*p = '\0';
++
++		switch (nlines) {
++		case 0: /* NAME */
++		{
++			struct libscols_cell *hr;
++
++			cl = scols_new_column();
++			if (!cl)
++				goto fail;
++			hr = scols_column_get_header(cl);
++			if (!hr || scols_cell_set_data(hr, line))
++				goto fail;
++			break;
++		}
++		case 1: /* WIDTH-HINT */
++		{
++			double whint = strtod_or_err(line, "failed to parse column whint");
++			if (scols_column_set_whint(cl, whint))
++				goto fail;
++			break;
++		}
++		case 2: /* FLAGS */
++		{
++			int num_flags = parse_column_flags(line);
++			if (scols_column_set_flags(cl, num_flags))
++				goto fail;
++			if (strcmp(line, "wrapnl") == 0) {
++				scols_column_set_wrapfunc(cl,
++						scols_wrapnl_chunksize,
++						scols_wrapnl_nextchunk,
++						NULL);
++				scols_column_set_safechars(cl, "\n");
++			}
++			break;
++		}
++		case 3: /* COLOR */
++			if (scols_column_set_color(cl, line))
++				goto fail;
++			break;
++		default:
++			break;
++		}
++
++		nlines++;
++	}
++
++	free(line);
++	return cl;
++fail:
++	free(line);
++	scols_unref_column(cl);
++	return NULL;
++}
++
++static int parse_column_data(FILE *f, struct libscols_table *tb, int col)
++{
++	size_t len = 0, nlines = 0;
++	int i;
++	char *str = NULL;
++
++	while ((i = getline(&str, &len, f)) != -1) {
++
++		struct libscols_line *ln;
++		char *p = strrchr(str, '\n');
++		if (p)
++			*p = '\0';
++
++		while ((p = strrchr(str, '\\')) && *(p + 1) == 'n') {
++			*p = '\n';
++			memmove(p + 1, p + 2, i - (p + 2 - str));
++		}
++
++		ln = scols_table_get_line(tb, nlines++);
++		if (!ln)
++			break;
++
++		scols_line_set_data(ln, col, str);
++	}
++
++	free(str);
++	return 0;
++
++}
++
++static struct libscols_line *get_line_with_id(struct libscols_table *tb,
++						int col_id, const char *id)
++{
++	struct libscols_line *ln;
++	struct libscols_iter *itr = scols_new_iter(SCOLS_ITER_FORWARD);
++
++	while (scols_table_next_line(tb, itr, &ln) == 0) {
++		struct libscols_cell *ce = scols_line_get_cell(ln, col_id);
++		const char *data = ce ? scols_cell_get_data(ce) : NULL;
++
++		if (data && strcmp(data, id) == 0)
++			break;
++	}
++
++	scols_free_iter(itr);
++	return ln;
++}
++
++static void compose_tree(struct libscols_table *tb, int parent_col, int id_col)
++{
++	struct libscols_line *ln;
++	struct libscols_iter *itr = scols_new_iter(SCOLS_ITER_FORWARD);
++
++	while (scols_table_next_line(tb, itr, &ln) == 0) {
++		struct libscols_line *parent = NULL;
++		struct libscols_cell *ce = scols_line_get_cell(ln, parent_col);
++		const char *data = ce ? scols_cell_get_data(ce) : NULL;
++
++		if (data)
++			parent = get_line_with_id(tb, id_col, data);
++		if (parent)
++			scols_line_add_child(parent, ln);
++	}
++
++	scols_free_iter(itr);
++}
++
++
++static void __attribute__((__noreturn__)) usage(void)
++{
++	FILE *out = stdout;
++	fprintf(out,
++		"\n %s [options] <column-data-file> ...\n\n", program_invocation_short_name);
++
++	fputs(" -m, --maxout                   fill all terminal width\n", out);
++	fputs(" -c, --column <file>            column definition\n", out);
++	fputs(" -n, --nlines <num>             number of lines\n", out);
++	fputs(" -J, --json                     JSON output format\n", out);
++	fputs(" -r, --raw                      RAW output format\n", out);
++	fputs(" -E, --export                   use key=\"value\" output format\n", out);
++	fputs(" -C, --colsep <str>             set columns separator\n", out);
++	fputs(" -w, --width <num>              hardcode terminal width\n", out);
++	fputs(" -p, --tree-parent-column <n>   parent column\n", out);
++	fputs(" -i, --tree-id-column <n>       id column\n", out);
++	fputs(" -h, --help                     this help\n", out);
++	fputs("\n", out);
++
++	exit(EXIT_SUCCESS);
++}
++
++int main(int argc, char *argv[])
++{
++	struct libscols_table *tb;
++	int c, n, nlines = 0;
++	int parent_col = -1, id_col = -1;
++
++	static const struct option longopts[] = {
++		{ "maxout", 0, NULL, 'm' },
++		{ "column", 1, NULL, 'c' },
++		{ "nlines", 1, NULL, 'n' },
++		{ "width",  1, NULL, 'w' },
++		{ "tree-parent-column", 1, NULL, 'p' },
++		{ "tree-id-column",	1, NULL, 'i' },
++		{ "json",   0, NULL, 'J' },
++		{ "raw",    0, NULL, 'r' },
++		{ "export", 0, NULL, 'E' },
++		{ "colsep",  1, NULL, 'C' },
++		{ "help",   0, NULL, 'h' },
++		{ NULL, 0, NULL, 0 },
++	};
++
++	static const ul_excl_t excl[] = {       /* rows and cols in ASCII order */
++		{ 'E', 'J', 'r' },
++		{ 0 }
++	};
++	int excl_st[ARRAY_SIZE(excl)] = UL_EXCL_STATUS_INIT;
++
++	setlocale(LC_ALL, "");	/* just to have enable UTF8 chars */
++	scols_init_debug(0);
++
++	tb = scols_new_table();
++	if (!tb)
++		err(EXIT_FAILURE, "failed to create output table");
++
++	while((c = getopt_long(argc, argv, "hCc:Ei:Jmn:p:rw:", longopts, NULL)) != -1) {
++
++		err_exclusive_options(c, longopts, excl, excl_st);
++
++		switch(c) {
++		case 'c': /* add column from file */
++		{
++			struct libscols_column *cl;
++			FILE *f = fopen(optarg, "r");
++
++			if (!f)
++				err(EXIT_FAILURE, "%s: open failed", optarg);
++			cl = parse_column(f);
++			if (cl && scols_table_add_column(tb, cl))
++				err(EXIT_FAILURE, "%s: failed to add column", optarg);
++			scols_unref_column(cl);
++			fclose(f);
++			break;
++		}
++		case 'p':
++			parent_col = strtou32_or_err(optarg, "failed to parse tree PARENT column");
++			break;
++		case 'i':
++			id_col = strtou32_or_err(optarg, "failed to parse tree ID column");
++			break;
++		case 'J':
++			scols_table_enable_json(tb, 1);
++			scols_table_set_name(tb, "testtable");
++			break;
++		case 'm':
++			scols_table_enable_maxout(tb, TRUE);
++			break;
++		case 'r':
++			scols_table_enable_raw(tb, TRUE);
++			break;
++		case 'E':
++			scols_table_enable_export(tb, TRUE);
++			break;
++		case 'C':
++			scols_table_set_column_separator(tb, optarg);
++			break;
++		case 'n':
++			nlines = strtou32_or_err(optarg, "failed to parse number of lines");
++			break;
++		case 'w':
++			scols_table_set_termforce(tb, SCOLS_TERMFORCE_ALWAYS);
++			scols_table_set_termwidth(tb, strtou32_or_err(optarg, "failed to parse terminal width"));
++			break;
++		case 'h':
++			usage();
++		default:
++			errtryhelp(EXIT_FAILURE);
++		}
++	}
++
++	if (nlines <= 0)
++		errx(EXIT_FAILURE, "--nlines not set");
++
++	for (n = 0; n < nlines; n++) {
++		struct libscols_line *ln = scols_new_line();
++
++		if (!ln || scols_table_add_line(tb, ln))
++			err(EXIT_FAILURE, "failed to add a new line");
++
++		scols_unref_line(ln);
++	}
++
++	n = 0;
++
++	while (optind < argc) {
++		FILE *f = fopen(argv[optind], "r");
++
++		if (!f)
++			err(EXIT_FAILURE, "%s: open failed", argv[optind]);
++
++		parse_column_data(f, tb, n);
++		optind++;
++		n++;
++	}
++
++	if (scols_table_is_tree(tb) && parent_col >= 0 && id_col >= 0)
++		compose_tree(tb, parent_col, id_col);
++
++	scols_table_enable_colors(tb, isatty(STDOUT_FILENO));
++
++	scols_print_table(tb);
++	scols_unref_table(tb);
++	return EXIT_SUCCESS;
++}
+diff --git a/libsmartcols/samples/maxout.c b/libsmartcols/samples/maxout.c
+new file mode 100644
+index 000000000..07a05e13f
+--- /dev/null
++++ b/libsmartcols/samples/maxout.c
+@@ -0,0 +1,56 @@
++/*
++ * Copyright (C) 2016 Karel Zak <kzak@redhat.com>
++ *
++ * This file may be redistributed under the terms of the
++ * GNU Lesser General Public License.
++ */
++#include <stdlib.h>
++#include <unistd.h>
++#include <string.h>
++#include <errno.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <dirent.h>
++#include <getopt.h>
++
++#include "c.h"
++#include "nls.h"
++#include "libsmartcols.h"
++
++enum { COL_LEFT, COL_FOO, COL_RIGHT };
++
++int main(int argc, char *argv[])
++{
++	struct libscols_table *tb;
++	int rc = -1, nlines = 3;
++
++	setlocale(LC_ALL, "");	/* just to have enable UTF8 chars */
++
++	scols_init_debug(0);
++
++	tb = scols_new_table();
++	if (!tb)
++		err(EXIT_FAILURE, "failed to create output table");
++
++	scols_table_enable_maxout(tb, TRUE);
++	if (!scols_table_new_column(tb, "LEFT", 0, 0))
++		goto done;
++	if (!scols_table_new_column(tb, "FOO", 0, 0))
++		goto done;
++	if (!scols_table_new_column(tb, "RIGHT", 0, SCOLS_FL_RIGHT))
++		goto done;
++
++	while (nlines--) {
++		struct libscols_line *ln = scols_table_new_line(tb, NULL);
++
++		scols_line_set_data(ln, COL_LEFT, "A");
++		scols_line_set_data(ln, COL_FOO, "B");
++		scols_line_set_data(ln, COL_RIGHT, "C");
++	}
++
++	scols_print_table(tb);
++	rc = 0;
++done:
++	scols_unref_table(tb);
++	return rc == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
++}
+diff --git a/libsmartcols/samples/title.c b/libsmartcols/samples/title.c
+new file mode 100644
+index 000000000..131400da4
+--- /dev/null
++++ b/libsmartcols/samples/title.c
+@@ -0,0 +1,135 @@
++/*
++ * Copyright (C) 2010-2014 Karel Zak <kzak@redhat.com>
++ *
++ * This file may be redistributed under the terms of the
++ * GNU Lesser General Public License.
++ */
++#include <stdlib.h>
++#include <unistd.h>
++#include <string.h>
++#include <errno.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <dirent.h>
++#include <getopt.h>
++
++#include "c.h"
++#include "nls.h"
++#include "strutils.h"
++#include "xalloc.h"
++
++#include "libsmartcols.h"
++
++
++enum { COL_NAME, COL_DATA };
++
++/* add columns to the @tb */
++static void setup_columns(struct libscols_table *tb)
++{
++	if (!scols_table_new_column(tb, "NAME", 0, 0))
++		goto fail;
++	if (!scols_table_new_column(tb, "DATA", 0, 0))
++		goto fail;
++	return;
++fail:
++	scols_unref_table(tb);
++	err(EXIT_FAILURE, "failed to create output columns");
++}
++
++static void add_line(struct libscols_table *tb, const char *name, const char *data)
++{
++	struct libscols_line *ln = scols_table_new_line(tb, NULL);
++	if (!ln)
++		err(EXIT_FAILURE, "failed to create output line");
++
++	if (scols_line_set_data(ln, COL_NAME, name))
++		goto fail;
++	if (scols_line_set_data(ln, COL_DATA, data))
++		goto fail;
++	return;
++fail:
++	scols_unref_table(tb);
++	err(EXIT_FAILURE, "failed to create output line");
++}
++
++int main(int argc, char *argv[])
++{
++	struct libscols_table *tb;
++	struct libscols_symbols *sy;
++	struct libscols_cell *title;
++	int c;
++
++	static const struct option longopts[] = {
++		{ "maxout", 0, NULL, 'm' },
++		{ "width",  1, NULL, 'w' },
++		{ "help",   1, NULL, 'h' },
++
++		{ NULL, 0, NULL, 0 },
++	};
++
++	setlocale(LC_ALL, "");	/* just to have enable UTF8 chars */
++
++	scols_init_debug(0);
++
++	tb = scols_new_table();
++	if (!tb)
++		err(EXIT_FAILURE, "failed to create output table");
++
++	while((c = getopt_long(argc, argv, "hmw:", longopts, NULL)) != -1) {
++		switch(c) {
++		case 'h':
++			printf("%s [--help | --maxout | --width <num>]\n", program_invocation_short_name);
++			break;
++		case 'm':
++			scols_table_enable_maxout(tb, TRUE);
++			break;
++		case 'w':
++			scols_table_set_termforce(tb, SCOLS_TERMFORCE_ALWAYS);
++			scols_table_set_termwidth(tb, strtou32_or_err(optarg, "failed to parse terminal width"));
++			break;
++		}
++	}
++
++	scols_table_enable_colors(tb, isatty(STDOUT_FILENO));
++	setup_columns(tb);
++	add_line(tb, "foo", "bla bla bla");
++	add_line(tb, "bar", "alb alb alb");
++
++	title = scols_table_get_title(tb);
++
++	/* right */
++	scols_cell_set_data(title, "This is right title");
++	scols_cell_set_color(title, "red");
++	scols_cell_set_flags(title, SCOLS_CELL_FL_RIGHT);
++	scols_print_table(tb);
++
++	/* left without padding */
++	scols_cell_set_data(title, "This is left title (without padding)");
++	scols_cell_set_color(title, "yellow");
++	scols_cell_set_flags(title, SCOLS_CELL_FL_LEFT);
++	scols_print_table(tb);
++
++	/* center */
++	sy = scols_new_symbols();
++	if (!sy)
++		err_oom();
++	scols_table_set_symbols(tb, sy);
++	scols_unref_symbols(sy);
++
++	scols_symbols_set_title_padding(sy, "=");
++	scols_cell_set_data(title, "This is center title (with padding)");
++	scols_cell_set_color(title, "green");
++	scols_cell_set_flags(title, SCOLS_CELL_FL_CENTER);
++	scols_print_table(tb);
++
++	/* left with padding */
++	scols_symbols_set_title_padding(sy, "-");
++	scols_cell_set_data(title, "This is left title (with padding)");
++	scols_cell_set_color(title, "blue");
++	scols_cell_set_flags(title, SCOLS_CELL_FL_LEFT);
++	scols_print_table(tb);
++
++
++	scols_unref_table(tb);
++	return EXIT_SUCCESS;
++}
+diff --git a/libsmartcols/src/test.c b/libsmartcols/samples/tree.c
+similarity index 68%
+rename from libsmartcols/src/test.c
+rename to libsmartcols/samples/tree.c
+index dd87fd38b..0cdb99420 100644
+--- a/libsmartcols/src/test.c
++++ b/libsmartcols/samples/tree.c
+@@ -39,7 +39,7 @@ static void setup_columns(struct libscols_table *tb, int notree)
+ 	return;
+ fail:
+ 	scols_unref_table(tb);
+-	err(EXIT_FAILURE, "faild to create output columns");
++	err(EXIT_FAILURE, "failed to create output columns");
+ }
+ 
+ /* add a new line to @tb, the content is based on @st */
+@@ -104,7 +104,7 @@ fail:
+ 	return -1;
+ }
+ 
+-/* read all entrines from directory addressed by @fd */
++/* read all entries from directory addressed by @fd */
+ static int add_children(struct libscols_table *tb,
+ 			struct libscols_line *ln,
+ 			int fd)
+@@ -142,12 +142,15 @@ static void add_lines(struct libscols_table *tb, const char *dirname)
+ static void __attribute__((__noreturn__)) usage(FILE *out)
+ {
+ 	fprintf(out, " %s [options] [<dir> ...]\n\n", program_invocation_short_name);
+-	fputs(" -c, --csv            display a csv-like output\n", out);
+-	fputs(" -i, --ascii          use ascii characters only\n", out);
+-	fputs(" -l, --list           use list format output\n", out);
+-	fputs(" -n, --noheadings     don't print headings\n", out);
+-	fputs(" -p, --pairs          use key=\"value\" output format\n", out);
+-	fputs(" -r, --raw            use raw output format\n", out);
++	fputs(" -c, --csv               display a csv-like output\n", out);
++	fputs(" -i, --ascii             use ascii characters only\n", out);
++	fputs(" -l, --list              use list format output\n", out);
++	fputs(" -n, --noheadings        don't print headings\n", out);
++	fputs(" -p, --pairs             use key=\"value\" output format\n", out);
++	fputs(" -J, --json              use JSON output format\n", out);
++	fputs(" -r, --raw               use raw output format\n", out);
++	fputs(" -S, --range-start <n>   first line to print\n", out);
++	fputs(" -E, --range-end <n>     last line to print\n", out);
+ 
+ 	exit(out == stderr ? EXIT_FAILURE : EXIT_SUCCESS);
+ }
+@@ -155,17 +158,20 @@ static void __attribute__((__noreturn__)) usage(FILE *out)
+ int main(int argc, char *argv[])
+ {
+ 	struct libscols_table *tb;
+-	int c, notree = 0;
++	int c, notree = 0, nstart = -1, nend = -1;
++
+ 
+ 	static const struct option longopts[] = {
+-		{ "ascii",	0, 0, 'i' },
+-		{ "csv",        0, 0, 'c' },
+-		{ "list",       0, 0, 'l' },
+-		{ "noheadings",	0, 0, 'n' },
+-		{ "pairs",      0, 0, 'p' },
+-		{ "raw",      0, 0, 'r' },
+-
+-		{ NULL, 0, 0, 0 },
++		{ "ascii",	0, NULL, 'i' },
++		{ "csv",        0, NULL, 'c' },
++		{ "list",       0, NULL, 'l' },
++		{ "noheadings",	0, NULL, 'n' },
++		{ "pairs",      0, NULL, 'p' },
++		{ "json",       0, NULL, 'J' },
++		{ "raw",        0, NULL, 'r' },
++		{ "range-start",1, NULL, 'S' },
++		{ "range-end",  1, NULL, 'E' },
++		{ NULL, 0, NULL, 0 },
+ 	};
+ 
+ 	setlocale(LC_ALL, "");	/* just to have enable UTF8 chars */
+@@ -174,9 +180,9 @@ int main(int argc, char *argv[])
+ 
+ 	tb = scols_new_table();
+ 	if (!tb)
+-		err(EXIT_FAILURE, "faild to create output table");
++		err(EXIT_FAILURE, "failed to create output table");
+ 
+-	while((c = getopt_long(argc, argv, "cilnpr", longopts, NULL)) != -1) {
++	while((c = getopt_long(argc, argv, "ciJlnprS:E:", longopts, NULL)) != -1) {
+ 		switch(c) {
+ 		case 'c':
+ 			scols_table_set_column_separator(tb, ",");
+@@ -186,6 +192,10 @@ int main(int argc, char *argv[])
+ 		case 'i':
+ 			scols_table_enable_ascii(tb, 1);
+ 			break;
++		case 'J':
++			scols_table_set_name(tb, "scolstest");
++			scols_table_enable_json(tb, 1);
++			break;
+ 		case 'l':
+ 			notree = 1;
+ 			break;
+@@ -200,19 +210,40 @@ int main(int argc, char *argv[])
+ 			scols_table_enable_raw(tb, 1);
+ 			notree = 1;
+ 			break;
++		case 'S':
++			nstart = strtos32_or_err(optarg, "failed to parse range start") - 1;
++			break;
++		case 'E':
++			nend = strtos32_or_err(optarg, "failed to parse range end") - 1;
++			break;
+ 		default:
+ 			usage(stderr);
+ 		}
+ 	}
+ 
+-	scols_table_enable_colors(tb, 1);
++	scols_table_enable_colors(tb, isatty(STDOUT_FILENO));
+ 	setup_columns(tb, notree);
+ 
+-	while (optind < argc)
++	if (optind == argc)
++		add_lines(tb, ".");
++	else while (optind < argc)
+ 		add_lines(tb, argv[optind++]);
+ 
+-	scols_print_table(tb);
+-	scols_unref_table(tb);
++	if (nstart >= 0 || nend >= 0) {
++		/* print subset */
++		struct libscols_line *start = NULL, *end = NULL;
++
++		if (nstart >= 0)
++			start = scols_table_get_line(tb, nstart);
++		if (nend >= 0)
++			end = scols_table_get_line(tb, nend);
+ 
++		if (start || end)
++			scols_table_print_range(tb, start, end);
++	} else
++		/* print all table */
++		scols_print_table(tb);
++
++	scols_unref_table(tb);
+ 	return EXIT_SUCCESS;
+ }
+diff --git a/libsmartcols/samples/wrap.c b/libsmartcols/samples/wrap.c
+new file mode 100644
+index 000000000..795bef714
+--- /dev/null
++++ b/libsmartcols/samples/wrap.c
+@@ -0,0 +1,111 @@
++/*
++ * Copyright (C) 2010-2014 Karel Zak <kzak@redhat.com>
++ *
++ * This file may be redistributed under the terms of the
++ * GNU Lesser General Public License.
++ */
++#include <stdlib.h>
++#include <unistd.h>
++#include <string.h>
++#include <errno.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <dirent.h>
++#include <getopt.h>
++
++#include "c.h"
++#include "nls.h"
++#include "strutils.h"
++#include "xalloc.h"
++
++#include "libsmartcols.h"
++
++
++enum { COL_NAME, COL_DESC, COL_FOO, COL_LIKE, COL_TEXT };
++
++/* add columns to the @tb */
++static void setup_columns(struct libscols_table *tb)
++{
++	if (!scols_table_new_column(tb, "NAME", 0, SCOLS_FL_TREE))
++		goto fail;
++	if (!scols_table_new_column(tb, "DESC", 0, 0))
++		goto fail;
++	if (!scols_table_new_column(tb, "FOO", 0, SCOLS_FL_WRAP))
++		goto fail;
++	if (!scols_table_new_column(tb, "LIKE", 0, SCOLS_FL_RIGHT))
++		goto fail;
++	if (!scols_table_new_column(tb, "TEXT", 0, SCOLS_FL_WRAP))
++		goto fail;
++	return;
++fail:
++	scols_unref_table(tb);
++	err(EXIT_FAILURE, "failed to create output columns");
++}
++
++static char *gen_text(const char *prefix, const char *sub_prefix, char *buf, size_t sz)
++{
++	int x = snprintf(buf, sz,  "%s-%s-", prefix, sub_prefix);
++
++	for ( ; (size_t)x < sz - 1; x++)
++		buf[x] = *prefix;
++
++	buf[x++] = 'x';
++	buf[x] = '\0';
++	return buf;
++}
++
++static struct libscols_line * add_line(	struct libscols_table *tb,
++					struct libscols_line *parent,
++					const char *prefix)
++{
++	char buf[BUFSIZ];
++	struct libscols_line *ln = scols_table_new_line(tb, parent);
++	if (!ln)
++		err(EXIT_FAILURE, "failed to create output line");
++
++	if (scols_line_set_data(ln, COL_NAME, gen_text(prefix, "N", buf, 15)))
++		goto fail;
++	if (scols_line_set_data(ln, COL_DESC, gen_text(prefix, "D", buf, 10)))
++		goto fail;
++	if (scols_line_set_data(ln, COL_FOO, gen_text(prefix, "U", buf, 55)))
++		goto fail;
++	if (scols_line_set_data(ln, COL_LIKE, "1"))
++		goto fail;
++	if (scols_line_set_data(ln, COL_TEXT, gen_text(prefix, "T", buf, 50)))
++		goto fail;
++	return ln;
++fail:
++	scols_unref_table(tb);
++	err(EXIT_FAILURE, "failed to create output line");
++}
++
++int main(int argc, char *argv[])
++{
++	struct libscols_table *tb;
++	struct libscols_line *ln, *xln;
++
++	setlocale(LC_ALL, "");	/* just to have enable UTF8 chars */
++
++	scols_init_debug(0);
++
++	tb = scols_new_table();
++	if (!tb)
++		err(EXIT_FAILURE, "failed to create output table");
++
++	scols_table_enable_colors(tb, isatty(STDOUT_FILENO));
++	setup_columns(tb);
++
++	ln = add_line(tb, NULL, "A");
++	add_line(tb, ln, "aa");
++	add_line(tb, ln, "ab");
++
++	ln = add_line(tb, NULL, "B");
++	xln = add_line(tb, ln, "ba");
++	add_line(tb, xln, "baa");
++	add_line(tb, xln, "bab");
++	add_line(tb, ln, "bb");
++
++	scols_print_table(tb);
++	scols_unref_table(tb);
++	return EXIT_SUCCESS;
++}
+diff --git a/libsmartcols/src/Makemodule.am b/libsmartcols/src/Makemodule.am
+index bfe8c75c1..952d5e58f 100644
+--- a/libsmartcols/src/Makemodule.am
++++ b/libsmartcols/src/Makemodule.am
+@@ -1,10 +1,10 @@
+ 
+ 
+-## smartcols.h is generated, so it's stored in builddir! (no distribute in RHEL7)
+-#smartcolsincdir = $(includedir)/libsmartcols
+-#nodist_smartcolsinc_HEADERS = $(top_builddir)/libsmartcols/src/libsmartcols.h
++# smartcols.h is generated, so it's stored in builddir!
++smartcolsincdir = $(includedir)/libsmartcols
++nodist_smartcolsinc_HEADERS = libsmartcols/src/libsmartcols.h
+ 
+-noinst_LTLIBRARIES += libsmartcols.la
++usrlib_exec_LTLIBRARIES += libsmartcols.la
+ libsmartcols_la_SOURCES= \
+ 	include/list.h \
+ 	\
+@@ -17,49 +17,32 @@ libsmartcols_la_SOURCES= \
+ 	libsmartcols/src/table.c \
+ 	libsmartcols/src/table_print.c \
+ 	libsmartcols/src/version.c \
+-	libsmartcols/src/init.c \
+-	$(nodist_smartcolsinc_HEADERS)
++	libsmartcols/src/init.c
+ 
+-nodist_libsmartcols_la_SOURCES = libsmartcols/src/smartcolsP.h
+-
+-libsmartcols_la_LIBADD = libcommon.la
++libsmartcols_la_LIBADD = $(LDADD) libcommon.la
+ 
+ libsmartcols_la_CFLAGS = \
++	$(AM_CFLAGS) \
+ 	$(SOLIB_CFLAGS) \
+ 	-I$(ul_libsmartcols_incdir) \
+ 	-I$(top_srcdir)/libsmartcols/src
+ 
+-libsmartcols_la_DEPENDENCIES = \
+-	libcommon.la \
+-	libsmartcols/src/libsmartcols.sym \
+-	libsmartcols/src/libsmartcols.h.in
++EXTRA_libsmartcols_la_DEPENDENCIES = \
++	libsmartcols/src/libsmartcols.sym
+ 
+ libsmartcols_la_LDFLAGS = \
+ 	$(SOLIB_LDFLAGS) \
+ 	-Wl,--version-script=$(top_srcdir)/libsmartcols/src/libsmartcols.sym \
+ 	-version-info $(LIBSMARTCOLS_VERSION_INFO)
+ 
+-EXTRA_DIST += \
+-	libsmartcols/src/libsmartcols.sym \
+-	libsmartcols/src/libsmartcols.h.in
+-
+-
+-if BUILD_LIBSMARTCOLS_TESTS
+-check_PROGRAMS += test_smartcols
+-
+-libsmartcols_tests_cflags = $(libsmartcols_la_CFLAGS)
+-libsmartcols_tests_ldadd  = libsmartcols.la libcommon.la
+-
+-test_smartcols_SOURCES = libsmartcols/src/test.c
+-test_smartcols_CFLAGS = $(libsmartcols_tests_cflags)
+-test_smartcols_LDADD = $(libsmartcols_tests_ldadd)
+-endif # BUILD_LIBSMARTCOLS_TESTS
+ 
++EXTRA_DIST += \
++	libsmartcols/src/libsmartcols.sym
+ 
+ # move lib from $(usrlib_execdir) to $(libdir) if needed
+ install-exec-hook-libsmartcols:
+ 	if test "$(usrlib_execdir)" != "$(libdir)" -a -f "$(DESTDIR)$(usrlib_execdir)/libsmartcols.so"; then \
+-		mkdir -p $(DESTDIR)$(libdir); \
++		$(MKDIR_P) $(DESTDIR)$(libdir); \
+ 		mv $(DESTDIR)$(usrlib_execdir)/libsmartcols.so.* $(DESTDIR)$(libdir); \
+ 		so_img_name=$$(readlink $(DESTDIR)$(usrlib_execdir)/libsmartcols.so); \
+ 		so_img_rel_target=$$(echo $(usrlib_execdir) | sed 's,\(^/\|\)[^/][^/]*,..,g'); \
+diff --git a/libsmartcols/src/cell.c b/libsmartcols/src/cell.c
+index ea41f698f..0717a2d09 100644
+--- a/libsmartcols/src/cell.c
++++ b/libsmartcols/src/cell.c
+@@ -11,7 +11,7 @@
+ /**
+  * SECTION: cell
+  * @title: Cell
+- * @short_description: cell API
++ * @short_description: container for your data
+  *
+  * An API to access and modify per-cell data and information. Note that cell is
+  * always part of the line. If you destroy (un-reference) a line than it
+@@ -41,8 +41,6 @@
+  */
+ int scols_reset_cell(struct libscols_cell *ce)
+ {
+-	assert(ce);
+-
+ 	if (!ce)
+ 		return -EINVAL;
+ 
+@@ -56,34 +54,21 @@ int scols_reset_cell(struct libscols_cell *ce)
+ /**
+  * scols_cell_set_data:
+  * @ce: a pointer to a struct libscols_cell instance
+- * @str: data (used for scols_printtable())
++ * @data: data (used for scols_print_table())
+  *
+- * Stores a copy of the @str in @ce.
++ * Stores a copy of the @str in @ce, the old data are deallocated by free().
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+-int scols_cell_set_data(struct libscols_cell *ce, const char *str)
++int scols_cell_set_data(struct libscols_cell *ce, const char *data)
+ {
+-	char *p = NULL;
+-
+-	assert(ce);
+-
+-	if (!ce)
+-		return -EINVAL;
+-	if (str) {
+-		p = strdup(str);
+-		if (!p)
+-			return -ENOMEM;
+-	}
+-	free(ce->data);
+-	ce->data = p;
+-	return 0;
++	return strdup_to_struct_member(ce, data, data);
+ }
+ 
+ /**
+  * scols_cell_refer_data:
+  * @ce: a pointer to a struct libscols_cell instance
+- * @str: data (used for scols_printtable())
++ * @data: data (used for scols_print_table())
+  *
+  * Adds a reference to @str to @ce. The pointer is deallocated by
+  * scols_reset_cell() or scols_unref_line(). This function is mostly designed
+@@ -92,14 +77,12 @@ int scols_cell_set_data(struct libscols_cell *ce, const char *str)
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+-int scols_cell_refer_data(struct libscols_cell *ce, char *str)
++int scols_cell_refer_data(struct libscols_cell *ce, char *data)
+ {
+-	assert(ce);
+-
+ 	if (!ce)
+ 		return -EINVAL;
+ 	free(ce->data);
+-	ce->data = str;
++	ce->data = data;
+ 	return 0;
+ }
+ 
+@@ -111,7 +94,6 @@ int scols_cell_refer_data(struct libscols_cell *ce, char *str)
+  */
+ const char *scols_cell_get_data(const struct libscols_cell *ce)
+ {
+-	assert(ce);
+ 	return ce ? ce->data : NULL;
+ }
+ 
+@@ -124,8 +106,6 @@ const char *scols_cell_get_data(const struct libscols_cell *ce)
+  */
+ int scols_cell_set_userdata(struct libscols_cell *ce, void *data)
+ {
+-	assert(ce);
+-
+ 	if (!ce)
+ 		return -EINVAL;
+ 	ce->userdata = data;
+@@ -140,7 +120,7 @@ int scols_cell_set_userdata(struct libscols_cell *ce, void *data)
+  */
+ void *scols_cell_get_userdata(struct libscols_cell *ce)
+ {
+-	return ce ? ce->userdata : NULL;
++	return ce->userdata;
+ }
+ 
+ /**
+@@ -178,7 +158,7 @@ int scols_cmpstr_cells(struct libscols_cell *a,
+ /**
+  * scols_cell_set_color:
+  * @ce: a pointer to a struct libscols_cell instance
+- * @color: ESC sequence
++ * @color: color name or ESC sequence
+  *
+  * Set the color of @ce to @color.
+  *
+@@ -186,32 +166,70 @@ int scols_cmpstr_cells(struct libscols_cell *a,
+  */
+ int scols_cell_set_color(struct libscols_cell *ce, const char *color)
+ {
+-	char *p = NULL;
++	if (color && isalpha(*color)) {
++		color = color_sequence_from_colorname(color);
++		if (!color)
++			return -EINVAL;
++	}
++	return strdup_to_struct_member(ce, color, color);
++}
+ 
+-	assert(ce);
++/**
++ * scols_cell_get_color:
++ * @ce: a pointer to a struct libscols_cell instance
++ *
++ * Returns: the current color of @ce.
++ */
++const char *scols_cell_get_color(const struct libscols_cell *ce)
++{
++	return ce->color;
++}
+ 
++/**
++ * scols_cell_set_flags:
++ * @ce: a pointer to a struct libscols_cell instance
++ * @flags: SCOLS_CELL_FL_* flags
++ *
++ * Note that cells in the table are always aligned by column flags. The cell
++ * flags are used for table title only (now).
++ *
++ * Returns: 0, a negative value in case of an error.
++ */
++int scols_cell_set_flags(struct libscols_cell *ce, int flags)
++{
+ 	if (!ce)
+ 		return -EINVAL;
+-	if (color) {
+-		p = strdup(color);
+-		if (!p)
+-			return -ENOMEM;
+-	}
+-	free(ce->color);
+-	ce->color = p;
++	ce->flags = flags;
+ 	return 0;
+ }
+ 
+ /**
+- * scols_cell_get_color:
++ * scols_cell_get_flags:
+  * @ce: a pointer to a struct libscols_cell instance
+  *
+- * Returns: the current color of @ce.
++ * Returns: the current flags
+  */
+-const char *scols_cell_get_color(const struct libscols_cell *ce)
++int scols_cell_get_flags(const struct libscols_cell *ce)
+ {
+-	assert(ce);
+-	return ce ? ce->color : NULL;
++	return ce->flags;
++}
++
++/**
++ * scols_cell_get_alignment:
++ * @ce: a pointer to a struct libscols_cell instance
++ *
++ * Since: 2.30
++ *
++ * Returns: SCOLS_CELL_FL_{RIGHT,CELNTER,LEFT}
++ */
++int scols_cell_get_alignment(const struct libscols_cell *ce)
++{
++	if (ce->flags & SCOLS_CELL_FL_RIGHT)
++		return SCOLS_CELL_FL_RIGHT;
++	else if (ce->flags & SCOLS_CELL_FL_CENTER)
++		return SCOLS_CELL_FL_CENTER;
++
++	return SCOLS_CELL_FL_LEFT;	/* default */
+ }
+ 
+ /**
+@@ -228,15 +246,12 @@ int scols_cell_copy_content(struct libscols_cell *dest,
+ {
+ 	int rc;
+ 
+-	assert(dest);
+-	assert(src);
+-
+ 	rc = scols_cell_set_data(dest, scols_cell_get_data(src));
+ 	if (!rc)
+ 		rc = scols_cell_set_color(dest, scols_cell_get_color(src));
+ 	if (!rc)
+ 		dest->userdata = src->userdata;
+ 
+-	DBG(CELL, ul_debugobj((void *) src, "copy into %p", dest));
++	DBG(CELL, ul_debugobj(src, "copy"));
+ 	return rc;
+ }
+diff --git a/libsmartcols/src/column.c b/libsmartcols/src/column.c
+index d1d10a6d0..e9d6dc404 100644
+--- a/libsmartcols/src/column.c
++++ b/libsmartcols/src/column.c
+@@ -11,7 +11,7 @@
+ /**
+  * SECTION: column
+  * @title: Column
+- * @short_description: column API
++ * @short_description: defines output columns formats, headers, etc.
+  *
+  * An API to access and modify per-column data and information.
+  */
+@@ -22,6 +22,8 @@
+ #include <string.h>
+ #include <ctype.h>
+ 
++#include "mbsalign.h"
++
+ #include "smartcolsP.h"
+ 
+ /**
+@@ -29,7 +31,7 @@
+  *
+  * Allocates space for a new column.
+  *
+- * Returns: a pointer to a new struct libscols_cell instance, NULL in case of an ENOMEM error.
++ * Returns: a pointer to a new struct libscols_column instance, NULL in case of an ENOMEM error.
+  */
+ struct libscols_column *scols_new_column(void)
+ {
+@@ -70,6 +72,8 @@ void scols_unref_column(struct libscols_column *cl)
+ 		list_del(&cl->cl_columns);
+ 		scols_reset_cell(&cl->header);
+ 		free(cl->color);
++		free(cl->safechars);
++		free(cl->pending_data_buf);
+ 		free(cl);
+ 	}
+ }
+@@ -86,14 +90,13 @@ struct libscols_column *scols_copy_column(const struct libscols_column *cl)
+ {
+ 	struct libscols_column *ret;
+ 
+-	assert (cl);
+ 	if (!cl)
+ 		return NULL;
+ 	ret = scols_new_column();
+ 	if (!ret)
+ 		return NULL;
+ 
+-	DBG(COL, ul_debugobj((void *) cl, "copy to %p", ret));
++	DBG(COL, ul_debugobj(cl, "copy"));
+ 
+ 	if (scols_column_set_color(ret, cl->color))
+ 		goto err;
+@@ -119,14 +122,12 @@ err:
+  * @cl: a pointer to a struct libscols_column instance
+  * @whint: a width hint
+  *
+- * Sets the width hint of column @cl to @whint.
++ * Sets the width hint of column @cl to @whint. See scols_table_new_column().
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+ int scols_column_set_whint(struct libscols_column *cl, double whint)
+ {
+-	assert(cl);
+-
+ 	if (!cl)
+ 		return -EINVAL;
+ 
+@@ -140,10 +141,9 @@ int scols_column_set_whint(struct libscols_column *cl, double whint)
+  *
+  * Returns: The width hint of column @cl, a negative value in case of an error.
+  */
+-double scols_column_get_whint(struct libscols_column *cl)
++double scols_column_get_whint(const struct libscols_column *cl)
+ {
+-	assert(cl);
+-	return cl ? cl->width_hint : -EINVAL;
++	return cl->width_hint;
+ }
+ 
+ /**
+@@ -157,25 +157,78 @@ double scols_column_get_whint(struct libscols_column *cl)
+  */
+ int scols_column_set_flags(struct libscols_column *cl, int flags)
+ {
+-	assert(cl);
+-
+ 	if (!cl)
+ 		return -EINVAL;
+ 
++	if (cl->table) {
++		if (!(cl->flags & SCOLS_FL_TREE) && (flags & SCOLS_FL_TREE))
++			cl->table->ntreecols++;
++		else if ((cl->flags & SCOLS_FL_TREE) && !(flags & SCOLS_FL_TREE))
++			cl->table->ntreecols--;
++	}
++
+ 	cl->flags = flags;
+ 	return 0;
+ }
+ 
++/**
++ * scols_column_set_json_type:
++ * @cl: a pointer to a struct libscols_column instance
++ * @type: SCOLS_JSON_* type
++ *
++ * Sets the type used for JSON formatting, the default is SCOLS_JSON_STRING.
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.33
++ */
++int scols_column_set_json_type(struct libscols_column *cl, int type)
++{
++	if (!cl)
++		return -EINVAL;
++
++	cl->json_type = type;
++	return 0;
++
++}
++
++/**
++ * scols_column_get_json_type:
++ * @cl: a pointer to a struct libscols_column instance
++ *
++ * Note that SCOLS_JSON_BOOLEAN interprets NULL, empty strings, '0', 'N' and
++ * 'n' as "false"; and everything else as "true".
++ *
++ * Returns: JSON type used for formatting or a negative value in case of an error.
++ *
++ * Since: 2.33
++ */
++int scols_column_get_json_type(const struct libscols_column *cl)
++{
++	return cl ? cl->json_type : -EINVAL;
++}
++
++
++/**
++ * scols_column_get_table:
++ * @cl: a pointer to a struct libscols_column instance
++ *
++ * Returns: pointer to the table where columns is used
++ */
++struct libscols_table *scols_column_get_table(const struct libscols_column *cl)
++{
++	return cl->table;
++}
++
+ /**
+  * scols_column_get_flags:
+  * @cl: a pointer to a struct libscols_column instance
+  *
+  * Returns: The flag mask of @cl, a negative value in case of an error.
+  */
+-int scols_column_get_flags(struct libscols_column *cl)
++int scols_column_get_flags(const struct libscols_column *cl)
+ {
+-	assert(cl);
+-	return cl ? cl->flags : -EINVAL;
++	return cl->flags;
+ }
+ 
+ /**
+@@ -187,14 +240,13 @@ int scols_column_get_flags(struct libscols_column *cl)
+  */
+ struct libscols_cell *scols_column_get_header(struct libscols_column *cl)
+ {
+-	assert(cl);
+-	return cl ? &cl->header : NULL;
++	return &cl->header;
+ }
+ 
+ /**
+  * scols_column_set_color:
+  * @cl: a pointer to a struct libscols_column instance
+- * @color: ESC sequence
++ * @color: color name or ESC sequence
+  *
+  * The default color for data cells and column header.
+  *
+@@ -208,20 +260,12 @@ struct libscols_cell *scols_column_get_header(struct libscols_column *cl)
+  */
+ int scols_column_set_color(struct libscols_column *cl, const char *color)
+ {
+-	char *p = NULL;
+-
+-	assert(cl);
+-	if (!cl)
+-		return -EINVAL;
+-	if (color) {
+-		p = strdup(color);
+-		if (!p)
+-			return -ENOMEM;
++	if (color && isalpha(*color)) {
++		color = color_sequence_from_colorname(color);
++		if (!color)
++			return -EINVAL;
+ 	}
+-
+-	free(cl->color);
+-	cl->color = p;
+-	return 0;
++	return strdup_to_struct_member(cl, color, color);
+ }
+ 
+ /**
+@@ -230,12 +274,79 @@ int scols_column_set_color(struct libscols_column *cl, const char *color)
+  *
+  * Returns: The current color setting of the column @cl.
+  */
+-const char *scols_column_get_color(struct libscols_column *cl)
++const char *scols_column_get_color(const struct libscols_column *cl)
++{
++	return cl->color;
++}
++
++/**
++ * scols_wrapnl_nextchunk:
++ * @cl: a pointer to a struct libscols_column instance
++ * @data: string
++ * @userdata: callback private data
++ *
++ * This is built-in function for scols_column_set_wrapfunc(). This function
++ * terminates the current chunk by \0 and returns pointer to the begin of
++ * the next chunk. The chunks are based on \n.
++ *
++ * For example for data "AAA\nBBB\nCCC" the next chunk is "BBB".
++ *
++ * Returns: next chunk
++ *
++ * Since: 2.29
++ */
++char *scols_wrapnl_nextchunk(const struct libscols_column *cl __attribute__((unused)),
++			char *data,
++			void *userdata __attribute__((unused)))
+ {
+-	assert(cl);
+-	return cl ? cl->color : NULL;
++	char *p = data ? strchr(data, '\n') : NULL;
++
++	if (p) {
++		*p = '\0';
++		return p + 1;
++	}
++	return NULL;
+ }
+ 
++/**
++ * scols_wrapnl_chunksize:
++ * @cl: a pointer to a struct libscols_column instance
++ * @data: string
++ * @userdata: callback private data
++ *
++ * Analyzes @data and returns size of the largest chunk. The chunks are based
++ * on \n. For example for data "AAA\nBBB\nCCCC" the largest chunk size is 4.
++ *
++ * Note that the size has to be based on number of terminal cells rather than
++ * bytes to support multu-byte output.
++ *
++ * Returns: size of the largest chunk.
++ *
++ * Since: 2.29
++ */
++size_t scols_wrapnl_chunksize(const struct libscols_column *cl __attribute__((unused)),
++		const char *data,
++		void *userdata __attribute__((unused)))
++{
++	size_t sum = 0;
++
++	while (data && *data) {
++		const char *p;
++		size_t sz;
++
++		p = strchr(data, '\n');
++		if (p) {
++			sz = mbs_safe_nwidth(data, p - data, NULL);
++			p++;
++		} else
++			sz = mbs_safe_width(data);
++
++		sum = max(sum, sz);
++		data = p;
++	}
++
++	return sum;
++}
+ 
+ /**
+  * scols_column_set_cmpfunc:
+@@ -251,7 +362,6 @@ int scols_column_set_cmpfunc(struct libscols_column *cl,
+ 				   void *),
+ 			void *data)
+ {
+-	assert(cl);
+ 	if (!cl)
+ 		return -EINVAL;
+ 
+@@ -261,19 +371,114 @@ int scols_column_set_cmpfunc(struct libscols_column *cl,
+ }
+ 
+ /**
+- * scols_column_is_trunc:
++ * scols_column_set_wrapfunc:
+  * @cl: a pointer to a struct libscols_column instance
++ * @wrap_chunksize: function to return size of the largest chink of data
++ * @wrap_nextchunk: function to return next zero terminated data
++ * @userdata: optional stuff for callbacks
+  *
+- * Gets the value of @cl's flag trunc.
++ * Extends SCOLS_FL_WRAP and allows to set custom wrap function. The default
++ * is to wrap by column size, but you can create functions to wrap for example
++ * after \n or after words, etc.
++ *
++ * Returns: 0, a negative value in case of an error.
+  *
+- * Returns: trunc flag value, negative value in case of an error.
++ * Since: 2.29
+  */
+-int scols_column_is_trunc(struct libscols_column *cl)
++int scols_column_set_wrapfunc(struct libscols_column *cl,
++			size_t (*wrap_chunksize)(const struct libscols_column *,
++						 const char *,
++						 void *),
++			char * (*wrap_nextchunk)(const struct libscols_column *,
++						 char *,
++						 void *),
++			void *userdata)
+ {
+-	assert(cl);
+ 	if (!cl)
+ 		return -EINVAL;
+-	return cl->flags & SCOLS_FL_TRUNC;
++
++	cl->wrap_nextchunk = wrap_nextchunk;
++	cl->wrap_chunksize = wrap_chunksize;
++	cl->wrapfunc_data = userdata;
++	return 0;
++}
++
++/**
++ * scols_column_set_safechars:
++ * @cl: a pointer to a struct libscols_column instance
++ * @safe: safe characters (e.g. "\n\t")
++ *
++ * Use for bytes you don't want to encode on output. This is for example
++ * necessary if you want to use custom wrap function based on \n, in this case
++ * you have to set "\n" as a safe char.
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.29
++ */
++int scols_column_set_safechars(struct libscols_column *cl, const char *safe)
++{
++	return strdup_to_struct_member(cl, safechars, safe);
++}
++
++/**
++ * scols_column_get_safechars:
++ * @cl: a pointer to a struct libscols_column instance
++ *
++ * Returns: safe chars
++ *
++ * Since: 2.29
++ */
++const char *scols_column_get_safechars(const struct libscols_column *cl)
++{
++	return cl->safechars;
++}
++
++/**
++ * scols_column_get_width:
++ * @cl: a pointer to a struct libscols_column instance
++ *
++ * Important note: the column width is unknown until library starts printing
++ * (width is calculated before printing). The function is usable for example in
++ * nextchunk() callback specified by scols_column_set_wrapfunc().
++ *
++ * See also scols_column_get_whint(), it returns wanted size (!= final size).
++ *
++ * Returns: column width
++ *
++ * Since: 2.29
++ */
++size_t scols_column_get_width(const struct libscols_column *cl)
++{
++	return cl->width;
++}
++
++/**
++ * scols_column_is_hidden:
++ * @cl: a pointer to a struct libscols_column instance
++ *
++ * Gets the value of @cl's flag hidden.
++ *
++ * Returns: 0 or 1
++ *
++ * Since: 2.27
++ */
++int scols_column_is_hidden(const struct libscols_column *cl)
++{
++	return cl->flags & SCOLS_FL_HIDDEN ? 1 : 0;
++}
++
++/**
++ * scols_column_is_trunc:
++ * @cl: a pointer to a struct libscols_column instance
++ *
++ * Gets the value of @cl's flag trunc.
++ *
++ * Returns: 0 or 1
++ */
++int scols_column_is_trunc(const struct libscols_column *cl)
++{
++	return cl->flags & SCOLS_FL_TRUNC ? 1 : 0;
+ }
+ /**
+  * scols_column_is_tree:
+@@ -281,14 +486,11 @@ int scols_column_is_trunc(struct libscols_column *cl)
+  *
+  * Gets the value of @cl's flag tree.
+  *
+- * Returns: tree flag value, negative value in case of an error.
++ * Returns: 0 or 1
+  */
+-int scols_column_is_tree(struct libscols_column *cl)
++int scols_column_is_tree(const struct libscols_column *cl)
+ {
+-	assert(cl);
+-	if (!cl)
+-		return -EINVAL;
+-	return cl->flags & SCOLS_FL_TREE;
++	return cl->flags & SCOLS_FL_TREE ? 1 : 0;
+ }
+ /**
+  * scols_column_is_right:
+@@ -296,14 +498,11 @@ int scols_column_is_tree(struct libscols_column *cl)
+  *
+  * Gets the value of @cl's flag right.
+  *
+- * Returns: right flag value, negative value in case of an error.
++ * Returns: 0 or 1
+  */
+-int scols_column_is_right(struct libscols_column *cl)
++int scols_column_is_right(const struct libscols_column *cl)
+ {
+-	assert(cl);
+-	if (!cl)
+-		return -EINVAL;
+-	return cl->flags & SCOLS_FL_RIGHT;
++	return cl->flags & SCOLS_FL_RIGHT ? 1 : 0;
+ }
+ /**
+  * scols_column_is_strict_width:
+@@ -311,14 +510,11 @@ int scols_column_is_right(struct libscols_column *cl)
+  *
+  * Gets the value of @cl's flag strict_width.
+  *
+- * Returns: strict_width flag value, negative value in case of an error.
++ * Returns: 0 or 1
+  */
+-int scols_column_is_strict_width(struct libscols_column *cl)
++int scols_column_is_strict_width(const struct libscols_column *cl)
+ {
+-	assert(cl);
+-	if (!cl)
+-		return -EINVAL;
+-	return cl->flags & SCOLS_FL_STRICTWIDTH;
++	return cl->flags & SCOLS_FL_STRICTWIDTH ? 1 : 0;
+ }
+ /**
+  * scols_column_is_noextremes:
+@@ -326,12 +522,37 @@ int scols_column_is_strict_width(struct libscols_column *cl)
+  *
+  * Gets the value of @cl's flag no_extremes.
+  *
+- * Returns: no_extremes flag value, negative value in case of an error.
++ * Returns: 0 or 1
+  */
+-int scols_column_is_noextremes(struct libscols_column *cl)
++int scols_column_is_noextremes(const struct libscols_column *cl)
+ {
+-	assert(cl);
+-	if (!cl)
+-		return -EINVAL;
+-	return cl->flags & SCOLS_FL_NOEXTREMES;
++	return cl->flags & SCOLS_FL_NOEXTREMES ? 1 : 0;
++}
++/**
++ * scols_column_is_wrap:
++ * @cl: a pointer to a struct libscols_column instance
++ *
++ * Gets the value of @cl's flag wrap.
++ *
++ * Returns: 0 or 1
++ *
++ * Since: 2.28
++ */
++int scols_column_is_wrap(const struct libscols_column *cl)
++{
++	return cl->flags & SCOLS_FL_WRAP ? 1 : 0;
++}
++/**
++ * scols_column_is_customwrap:
++ * @cl: a pointer to a struct libscols_column instance
++ *
++ * Returns: 0 or 1
++ *
++ * Since: 2.29
++ */
++int scols_column_is_customwrap(const struct libscols_column *cl)
++{
++	return (cl->flags & SCOLS_FL_WRAP)
++		&& cl->wrap_chunksize
++		&& cl->wrap_nextchunk ? 1 : 0;
+ }
+diff --git a/libsmartcols/src/iter.c b/libsmartcols/src/iter.c
+index 72c7865a8..91cc08009 100644
+--- a/libsmartcols/src/iter.c
++++ b/libsmartcols/src/iter.c
+@@ -68,7 +68,7 @@ void scols_reset_iter(struct libscols_iter *itr, int direction)
+  *
+  * Returns: SCOLS_INTER_{FOR,BACK}WARD
+  */
+-int scols_iter_get_direction(struct libscols_iter *itr)
++int scols_iter_get_direction(const struct libscols_iter *itr)
+ {
+ 	return itr->direction;
+ }
+diff --git a/libsmartcols/src/libsmartcols.h.in b/libsmartcols/src/libsmartcols.h.in
+index e61256022..f8be0bc04 100644
+--- a/libsmartcols/src/libsmartcols.h.in
++++ b/libsmartcols/src/libsmartcols.h.in
+@@ -83,12 +83,33 @@ enum {
+ 	SCOLS_FL_RIGHT	     = (1 << 2),   /* align to the right */
+ 	SCOLS_FL_STRICTWIDTH = (1 << 3),   /* don't reduce width if column is empty */
+ 	SCOLS_FL_NOEXTREMES  = (1 << 4),   /* ignore extreme fields when count column width*/
++	SCOLS_FL_HIDDEN	     = (1 << 5),   /* maintain data, but don't print */
++	SCOLS_FL_WRAP	     = (1 << 6)    /* wrap long lines to multi-line cells */
++};
++
++/*
++ * Column JSON types
++ */
++enum {
++	SCOLS_JSON_STRING    = 0,	/* default */
++	SCOLS_JSON_NUMBER    = 1,
++	SCOLS_JSON_BOOLEAN   = 2
++};
++
++/*
++ * Cell flags, see scols_cell_set_flags() before use
++ */
++enum {
++	/* alignment evaluated in order: right,center,left */
++	SCOLS_CELL_FL_LEFT    = 0,
++	SCOLS_CELL_FL_CENTER  = (1 << 0),
++	SCOLS_CELL_FL_RIGHT   = (1 << 1)
+ };
+ 
+ extern struct libscols_iter *scols_new_iter(int direction);
+ extern void scols_free_iter(struct libscols_iter *itr);
+ extern void scols_reset_iter(struct libscols_iter *itr, int direction);
+-extern int scols_iter_get_direction(struct libscols_iter *itr);
++extern int scols_iter_get_direction(const struct libscols_iter *itr);
+ 
+ /* init.c */
+ extern void scols_init_debug(int mask);
+@@ -101,50 +122,78 @@ extern int scols_get_library_version(const char **ver_string);
+ extern struct libscols_symbols *scols_new_symbols(void);
+ extern void scols_ref_symbols(struct libscols_symbols *sy);
+ extern void scols_unref_symbols(struct libscols_symbols *sy);
+-extern struct libscols_symbols *scols_copy_symbols(const struct libscols_symbols *sb);
+-extern int scols_symbols_set_branch(struct libscols_symbols *sb, const char *str);
+-extern int scols_symbols_set_vertical(struct libscols_symbols *sb, const char *str);
+-extern int scols_symbols_set_right(struct libscols_symbols *sb, const char *str);
++extern struct libscols_symbols *scols_copy_symbols(const struct libscols_symbols *sy);
++extern int scols_symbols_set_branch(struct libscols_symbols *sy, const char *str);
++extern int scols_symbols_set_vertical(struct libscols_symbols *sy, const char *str);
++extern int scols_symbols_set_right(struct libscols_symbols *sy, const char *str);
++extern int scols_symbols_set_title_padding(struct libscols_symbols *sy, const char *str);
++extern int scols_symbols_set_cell_padding(struct libscols_symbols *sy, const char *str);
+ 
+ /* cell.c */
+ extern int scols_reset_cell(struct libscols_cell *ce);
+ extern int scols_cell_copy_content(struct libscols_cell *dest,
+ 				   const struct libscols_cell *src);
+-extern int scols_cell_set_data(struct libscols_cell *ce, const char *str);
+-extern int scols_cell_refer_data(struct libscols_cell *ce, char *str);
++extern int scols_cell_set_data(struct libscols_cell *ce, const char *data);
++extern int scols_cell_refer_data(struct libscols_cell *ce, char *data);
+ extern const char *scols_cell_get_data(const struct libscols_cell *ce);
+ extern int scols_cell_set_color(struct libscols_cell *ce, const char *color);
+ extern const char *scols_cell_get_color(const struct libscols_cell *ce);
+ 
++extern int scols_cell_set_flags(struct libscols_cell *ce, int flags);
++extern int scols_cell_get_flags(const struct libscols_cell *ce);
++extern int scols_cell_get_alignment(const struct libscols_cell *ce);
++
+ extern void *scols_cell_get_userdata(struct libscols_cell *ce);
+ extern int scols_cell_set_userdata(struct libscols_cell *ce, void *data);
+ 
+ extern int scols_cmpstr_cells(struct libscols_cell *a,
+ 			      struct libscols_cell *b, void *data);
+ /* column.c */
+-extern int scols_column_is_tree(struct libscols_column *cl);
+-extern int scols_column_is_trunc(struct libscols_column *cl);
+-extern int scols_column_is_right(struct libscols_column *cl);
+-extern int scols_column_is_strict_width(struct libscols_column *cl);
+-extern int scols_column_is_noextremes(struct libscols_column *cl);
++extern int scols_column_is_tree(const struct libscols_column *cl);
++extern int scols_column_is_trunc(const struct libscols_column *cl);
++extern int scols_column_is_right(const struct libscols_column *cl);
++extern int scols_column_is_strict_width(const struct libscols_column *cl);
++extern int scols_column_is_hidden(const struct libscols_column *cl);
++extern int scols_column_is_noextremes(const struct libscols_column *cl);
++extern int scols_column_is_wrap(const struct libscols_column *cl);
++extern int scols_column_is_customwrap(const struct libscols_column *cl);
++
++extern size_t scols_column_get_width(const struct libscols_column *cl);
++
++extern int scols_column_set_safechars(struct libscols_column *cl, const char *safe);
++extern const char *scols_column_get_safechars(const struct libscols_column *cl);
++
++extern int scols_column_set_json_type(struct libscols_column *cl, int type);
++extern int scols_column_get_json_type(const struct libscols_column *cl);
+ 
+ extern int scols_column_set_flags(struct libscols_column *cl, int flags);
+-extern int scols_column_get_flags(struct libscols_column *cl);
++extern int scols_column_get_flags(const struct libscols_column *cl);
+ extern struct libscols_column *scols_new_column(void);
+ extern void scols_ref_column(struct libscols_column *cl);
+ extern void scols_unref_column(struct libscols_column *cl);
+ extern struct libscols_column *scols_copy_column(const struct libscols_column *cl);
+ extern int scols_column_set_whint(struct libscols_column *cl, double whint);
+-extern double scols_column_get_whint(struct libscols_column *cl);
++extern double scols_column_get_whint(const struct libscols_column *cl);
+ extern struct libscols_cell *scols_column_get_header(struct libscols_column *cl);
+ extern int scols_column_set_color(struct libscols_column *cl, const char *color);
+-extern const char *scols_column_get_color(struct libscols_column *cl);
++extern const char *scols_column_get_color(const struct libscols_column *cl);
++extern struct libscols_table *scols_column_get_table(const struct libscols_column *cl);
+ 
+ extern int scols_column_set_cmpfunc(struct libscols_column *cl,
+ 			int (*cmp)(struct libscols_cell *a,
+ 				   struct libscols_cell *b, void *),
+ 			void *data);
+ 
++extern int scols_column_set_wrapfunc(struct libscols_column *cl,
++			size_t (*wrap_chunksize)(const struct libscols_column *,
++					 const char *, void *),
++			char * (*wrap_nextchunk)(const struct libscols_column *,
++					 char *, void *),
++			void *userdata);
++
++extern char *scols_wrapnl_nextchunk(const struct libscols_column *cl, char *data, void *userdata);
++extern size_t scols_wrapnl_chunksize(const struct libscols_column *cl, const char *data, void *userdata);
++
+ /* line.c */
+ extern struct libscols_line *scols_new_line(void);
+ extern void scols_ref_line(struct libscols_line *ln);
+@@ -156,36 +205,52 @@ extern void *scols_line_get_userdata(struct libscols_line *ln);
+ extern int scols_line_remove_child(struct libscols_line *ln, struct libscols_line *child);
+ extern int scols_line_add_child(struct libscols_line *ln, struct libscols_line *child);
+ extern int scols_line_has_children(struct libscols_line *ln);
++extern int scols_line_is_ancestor(struct libscols_line *ln, struct libscols_line *parent);
+ extern int scols_line_next_child(struct libscols_line *ln,
+ 			  struct libscols_iter *itr, struct libscols_line **chld);
+-extern struct libscols_line *scols_line_get_parent(struct libscols_line *ln);
++extern struct libscols_line *scols_line_get_parent(const struct libscols_line *ln);
+ extern int scols_line_set_color(struct libscols_line *ln, const char *color);
+-extern const char *scols_line_get_color(struct libscols_line *ln);
+-extern size_t scols_line_get_ncells(struct libscols_line *ln);
++extern const char *scols_line_get_color(const struct libscols_line *ln);
++extern size_t scols_line_get_ncells(const struct libscols_line *ln);
+ extern struct libscols_cell *scols_line_get_cell(struct libscols_line *ln, size_t n);
+ extern struct libscols_cell *scols_line_get_column_cell(
+ 		                        struct libscols_line *ln,
+ 		                        struct libscols_column *cl);
+ extern int scols_line_set_data(struct libscols_line *ln, size_t n, const char *data);
+ extern int scols_line_refer_data(struct libscols_line *ln, size_t n, char *data);
+-extern struct libscols_line *scols_copy_line(struct libscols_line *ln);
++extern int scols_line_set_column_data(struct libscols_line *ln, struct libscols_column *cl, const char *data);
++extern int scols_line_refer_column_data(struct libscols_line *ln, struct libscols_column *cl, char *data);
++extern struct libscols_line *scols_copy_line(const struct libscols_line *ln);
+ 
+ /* table */
+-extern int scols_table_colors_wanted(struct libscols_table *tb);
+-extern int scols_table_is_raw(struct libscols_table *tb);
+-extern int scols_table_is_ascii(struct libscols_table *tb);
+-extern int scols_table_is_noheadings(struct libscols_table *tb);
+-extern int scols_table_is_empty(struct libscols_table *tb);
+-extern int scols_table_is_export(struct libscols_table *tb);
+-extern int scols_table_is_maxout(struct libscols_table *tb);
+-extern int scols_table_is_tree(struct libscols_table *tb);
++extern int scols_table_colors_wanted(const struct libscols_table *tb);
++extern int scols_table_set_name(struct libscols_table *tb, const char *name);
++extern const char *scols_table_get_name(const struct libscols_table *tb);
++extern struct libscols_cell *scols_table_get_title(struct libscols_table *tb);
++extern int scols_table_is_raw(const struct libscols_table *tb);
++extern int scols_table_is_ascii(const struct libscols_table *tb);
++extern int scols_table_is_json(const struct libscols_table *tb);
++extern int scols_table_is_noheadings(const struct libscols_table *tb);
++extern int scols_table_is_header_repeat(const struct libscols_table *tb);
++extern int scols_table_is_empty(const struct libscols_table *tb);
++extern int scols_table_is_export(const struct libscols_table *tb);
++extern int scols_table_is_maxout(const struct libscols_table *tb);
++extern int scols_table_is_nowrap(const struct libscols_table *tb);
++extern int scols_table_is_nolinesep(const struct libscols_table *tb);
++extern int scols_table_is_tree(const struct libscols_table *tb);
++extern int scols_table_is_noencoding(const struct libscols_table *tb);
+ 
+ extern int scols_table_enable_colors(struct libscols_table *tb, int enable);
+ extern int scols_table_enable_raw(struct libscols_table *tb, int enable);
+ extern int scols_table_enable_ascii(struct libscols_table *tb, int enable);
++extern int scols_table_enable_json(struct libscols_table *tb, int enable);
+ extern int scols_table_enable_noheadings(struct libscols_table *tb, int enable);
++extern int scols_table_enable_header_repeat(struct libscols_table *tb, int enable);
+ extern int scols_table_enable_export(struct libscols_table *tb, int enable);
+ extern int scols_table_enable_maxout(struct libscols_table *tb, int enable);
++extern int scols_table_enable_nowrap(struct libscols_table *tb, int enable);
++extern int scols_table_enable_nolinesep(struct libscols_table *tb, int enable);
++extern int scols_table_enable_noencoding(struct libscols_table *tb, int enable);
+ 
+ extern int scols_table_set_column_separator(struct libscols_table *tb, const char *sep);
+ extern int scols_table_set_line_separator(struct libscols_table *tb, const char *sep);
+@@ -196,12 +261,13 @@ extern void scols_unref_table(struct libscols_table *tb);
+ extern int scols_table_add_column(struct libscols_table *tb, struct libscols_column *cl);
+ extern int scols_table_remove_column(struct libscols_table *tb, struct libscols_column *cl);
+ extern int scols_table_remove_columns(struct libscols_table *tb);
++extern int scols_table_move_column(struct libscols_table *tb, struct libscols_column *pre, struct libscols_column *cl);
+ extern struct libscols_column *scols_table_new_column(struct libscols_table *tb, const char *name, double whint, int flags);
+ extern int scols_table_next_column(struct libscols_table *tb, struct libscols_iter *itr, struct libscols_column **cl);
+-extern char *scols_table_get_column_separator(struct libscols_table *tb);
+-extern char *scols_table_get_line_separator(struct libscols_table *tb);
+-extern int scols_table_get_ncols(struct libscols_table *tb);
+-extern int scols_table_get_nlines(struct libscols_table *tb);
++extern const char *scols_table_get_column_separator(const struct libscols_table *tb);
++extern const char *scols_table_get_line_separator(const struct libscols_table *tb);
++extern size_t scols_table_get_ncols(const struct libscols_table *tb);
++extern size_t scols_table_get_nlines(const struct libscols_table *tb);
+ extern struct libscols_column *scols_table_get_column(struct libscols_table *tb, size_t n);
+ extern int scols_table_add_line(struct libscols_table *tb, struct libscols_line *ln);
+ extern int scols_table_remove_line(struct libscols_table *tb, struct libscols_line *ln);
+@@ -211,17 +277,43 @@ extern struct libscols_line *scols_table_new_line(struct libscols_table *tb, str
+ extern struct libscols_line *scols_table_get_line(struct libscols_table *tb, size_t n);
+ extern struct libscols_table *scols_copy_table(struct libscols_table *tb);
+ extern int scols_table_set_symbols(struct libscols_table *tb, struct libscols_symbols *sy);
++extern int scols_table_set_default_symbols(struct libscols_table *tb);
++extern struct libscols_symbols *scols_table_get_symbols(const struct libscols_table *tb);
+ 
+ extern int scols_table_set_stream(struct libscols_table *tb, FILE *stream);
+-extern FILE *scols_table_get_stream(struct libscols_table *tb);
++extern FILE *scols_table_get_stream(const struct libscols_table *tb);
+ extern int scols_table_reduce_termwidth(struct libscols_table *tb, size_t reduce);
+ 
+ extern int scols_sort_table(struct libscols_table *tb, struct libscols_column *cl);
++extern int scols_sort_table_by_tree(struct libscols_table *tb);
++/*
++ *
++ */
++enum {
++	SCOLS_TERMFORCE_AUTO = 0,
++	SCOLS_TERMFORCE_NEVER,
++	SCOLS_TERMFORCE_ALWAYS
++};
++extern int scols_table_set_termforce(struct libscols_table *tb, int force);
++extern int scols_table_get_termforce(const struct libscols_table *tb);
++extern int scols_table_set_termwidth(struct libscols_table *tb, size_t width);
++extern size_t scols_table_get_termwidth(const struct libscols_table *tb);
++extern int scols_table_set_termheight(struct libscols_table *tb, size_t height);
++extern size_t scols_table_get_termheight(const struct libscols_table *tb);
++
+ 
+ /* table_print.c */
+ extern int scols_print_table(struct libscols_table *tb);
+ extern int scols_print_table_to_string(struct libscols_table *tb, char **data);
+ 
++extern int scols_table_print_range(	struct libscols_table *tb,
++					struct libscols_line *start,
++					struct libscols_line *end);
++extern int scols_table_print_range_to_string(	struct libscols_table *tb,
++						struct libscols_line *start,
++						struct libscols_line *end,
++						char **data);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/libsmartcols/src/libsmartcols.sym b/libsmartcols/src/libsmartcols.sym
+index a4de524f4..331a55554 100644
+--- a/libsmartcols/src/libsmartcols.sym
++++ b/libsmartcols/src/libsmartcols.sym
+@@ -1,5 +1,7 @@
+ /*
+  * symbols since util-linux 2.25
++ *
++ * Copyright (C) 2014-2016 Karel Zak <kzak@redhat.com>
+  */
+ SMARTCOLS_2.25 {
+ global:
+@@ -110,3 +112,73 @@ global:
+ local:
+ 	*;
+ };
++
++SMARTCOLS_2.27 {
++global:
++	scols_column_is_hidden;
++	scols_table_enable_json;
++	scols_table_is_json;
++	scols_table_set_name;
++} SMARTCOLS_2.25;
++
++SMARTCOLS_2.28 {
++global:
++	scols_column_is_wrap;
++	scols_line_refer_column_data;
++	scols_line_set_column_data;
++	scols_symbols_set_title_padding;
++	scols_table_enable_nowrap;
++	scols_table_get_title;
++	scols_cell_get_flags;
++	scols_cell_set_flags;
++	scols_table_print_range;
++	scols_table_print_range_to_string;
++	scols_table_enable_nolinesep;
++} SMARTCOLS_2.27;
++
++SMARTCOLS_2.29 {
++global:
++	scols_column_get_safechars;
++	scols_column_get_table;
++	scols_column_get_width;
++	scols_column_is_customwrap;
++	scols_column_set_safechars;
++	scols_column_set_wrapfunc;
++	scols_symbols_set_cell_padding;
++	scols_table_get_name;
++	scols_table_get_symbols;
++	scols_table_get_termforce;
++	scols_table_get_termwidth;
++	scols_table_is_nolinesep;
++	scols_table_is_nowrap;
++	scols_table_set_default_symbols;
++	scols_table_set_termforce;
++	scols_table_set_termwidth;
++	scols_wrapnl_chunksize;
++	scols_wrapnl_nextchunk;
++} SMARTCOLS_2.28;
++
++
++SMARTCOLS_2.30 {
++global:
++	scols_cell_get_alignment;
++	scols_table_move_column;
++	scols_sort_table_by_tree;
++	scols_line_is_ancestor;
++} SMARTCOLS_2.29;
++
++
++SMARTCOLS_2.31 {
++	scols_table_set_termheight;
++	scols_table_get_termheight;
++	scols_table_is_header_repeat;
++	scols_table_enable_header_repeat;
++	scols_table_enable_noencoding;
++	scols_table_is_noencoding;
++} SMARTCOLS_2.30;
++
++
++SMARTCOLS_2.33 {
++	scols_column_set_json_type;
++	scols_column_get_json_type;
++} SMARTCOLS_2.31;
+diff --git a/libsmartcols/src/line.c b/libsmartcols/src/line.c
+index debfeab78..60be2c135 100644
+--- a/libsmartcols/src/line.c
++++ b/libsmartcols/src/line.c
+@@ -11,7 +11,7 @@
+ /**
+  * SECTION: line
+  * @title: Line
+- * @short_description: line API
++ * @short_description: cells container, also keeps tree (parent->child) information
+  *
+  * An API to access and modify per-line data and information.
+  */
+@@ -71,7 +71,6 @@ void scols_ref_line(struct libscols_line *ln)
+  */
+ void scols_unref_line(struct libscols_line *ln)
+ {
+-
+ 	if (ln && --ln->refcount <= 0) {
+ 		DBG(CELL, ul_debugobj(ln, "dealloc"));
+ 		list_del(&ln->ln_lines);
+@@ -122,8 +121,6 @@ int scols_line_alloc_cells(struct libscols_line *ln, size_t n)
+ {
+ 	struct libscols_cell *ce;
+ 
+-	assert(ln);
+-
+ 	if (!ln)
+ 		return -EINVAL;
+ 	if (ln->ncells == n)
+@@ -149,6 +146,35 @@ int scols_line_alloc_cells(struct libscols_line *ln, size_t n)
+ 	return 0;
+ }
+ 
++int scols_line_move_cells(struct libscols_line *ln, size_t newn, size_t oldn)
++{
++	struct libscols_cell ce;
++
++	if (!ln || newn >= ln->ncells || oldn >= ln->ncells)
++		return -EINVAL;
++	if (oldn == newn)
++		return 0;
++
++	DBG(LINE, ul_debugobj(ln, "move cells[%zu] -> cells[%zu]", oldn, newn));
++
++	/* remember data from old position */
++	memcpy(&ce, &ln->cells[oldn], sizeof(struct libscols_cell));
++
++	/* remove old position (move data behind oldn to oldn) */
++	if (oldn + 1 < ln->ncells)
++		memmove(ln->cells + oldn, ln->cells + oldn + 1,
++			(ln->ncells - oldn - 1) * sizeof(struct libscols_cell));
++
++	/* create a space for new position */
++	if (newn + 1 < ln->ncells)
++		memmove(ln->cells + newn + 1, ln->cells + newn,
++			(ln->ncells - newn - 1) * sizeof(struct libscols_cell));
++
++	/* copy original data to new position */
++	memcpy(&ln->cells[newn], &ce, sizeof(struct libscols_cell));
++	return 0;
++}
++
+ /**
+  * scols_line_set_userdata:
+  * @ln: a pointer to a struct libscols_line instance
+@@ -160,7 +186,6 @@ int scols_line_alloc_cells(struct libscols_line *ln, size_t n)
+  */
+ int scols_line_set_userdata(struct libscols_line *ln, void *data)
+ {
+-	assert(ln);
+ 	if (!ln)
+ 		return -EINVAL;
+ 	ln->userdata = data;
+@@ -171,12 +196,11 @@ int scols_line_set_userdata(struct libscols_line *ln, void *data)
+  * scols_line_get_userdata:
+  * @ln: a pointer to a struct libscols_line instance
+  *
+- * Returns: 0, a negative value in case of an error.
++ * Returns: user data
+  */
+ void *scols_line_get_userdata(struct libscols_line *ln)
+ {
+-	assert(ln);
+-	return ln ? ln->userdata : NULL;
++	return ln->userdata;
+ }
+ 
+ /**
+@@ -190,13 +214,10 @@ void *scols_line_get_userdata(struct libscols_line *ln)
+  */
+ int scols_line_remove_child(struct libscols_line *ln, struct libscols_line *child)
+ {
+-	assert(ln);
+-	assert(child);
+-
+ 	if (!ln || !child)
+ 		return -EINVAL;
+ 
+-	DBG(LINE, ul_debugobj(ln, "remove child %p", child));
++	DBG(LINE, ul_debugobj(ln, "remove child"));
+ 
+ 	list_del_init(&child->ln_children);
+ 	child->parent = NULL;
+@@ -217,26 +238,22 @@ int scols_line_remove_child(struct libscols_line *ln, struct libscols_line *chil
+  */
+ int scols_line_add_child(struct libscols_line *ln, struct libscols_line *child)
+ {
+-	assert(ln);
+-	assert(child);
+-
+ 	if (!ln || !child)
+ 		return -EINVAL;
+ 
++	DBG(LINE, ul_debugobj(ln, "add child"));
++	scols_ref_line(child);
++	scols_ref_line(ln);
++
+ 	/* unref old<->parent */
+ 	if (child->parent)
+ 		scols_line_remove_child(child->parent, child);
+ 
+-	DBG(LINE, ul_debugobj(ln, "add child %p", child));
+-
+ 	/* new reference from parent to child */
+ 	list_add_tail(&child->ln_children, &ln->ln_branch);
+-	scols_ref_line(child);
+ 
+ 	/* new reference from child to parent */
+ 	child->parent = ln;
+-	scols_ref_line(ln);
+-
+ 	return 0;
+ }
+ 
+@@ -246,9 +263,8 @@ int scols_line_add_child(struct libscols_line *ln, struct libscols_line *child)
+  *
+  * Returns: a pointer to @ln's parent, NULL in case it has no parent or if there was an error.
+  */
+-struct libscols_line *scols_line_get_parent(struct libscols_line *ln)
++struct libscols_line *scols_line_get_parent(const struct libscols_line *ln)
+ {
+-	assert(ln);
+ 	return ln ? ln->parent : NULL;
+ }
+ 
+@@ -260,7 +276,6 @@ struct libscols_line *scols_line_get_parent(struct libscols_line *ln)
+  */
+ int scols_line_has_children(struct libscols_line *ln)
+ {
+-	assert(ln);
+ 	return ln ? !list_empty(&ln->ln_branch) : 0;
+ }
+ 
+@@ -294,29 +309,44 @@ int scols_line_next_child(struct libscols_line *ln,
+ 	return rc;
+ }
+ 
++
++/**
++ * scols_line_is_ancestor:
++ * @ln: line
++ * @parent: potential parent
++ *
++ * The function is designed to detect circular dependencies between @ln and
++ * @parent. It checks if @ln is not any (grand) parent in the @parent's tree.
++ *
++ * Since: 2.30
++ *
++ * Returns: 0 or 1
++ */
++int scols_line_is_ancestor(struct libscols_line *ln, struct libscols_line *parent)
++{
++	while (parent) {
++		if (parent == ln)
++			return 1;
++		parent = scols_line_get_parent(parent);
++	};
++	return 0;
++}
++
+ /**
+  * scols_line_set_color:
+  * @ln: a pointer to a struct libscols_line instance
+- * @color: ESC sequence
++ * @color: color name or ESC sequence
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+ int scols_line_set_color(struct libscols_line *ln, const char *color)
+ {
+-	char *p = NULL;
+-
+-	assert(ln);
+-	if (!ln)
+-		return -EINVAL;
+-	if (color) {
+-		p = strdup(color);
+-		if (!p)
+-			return -ENOMEM;
++	if (color && isalnum(*color)) {
++		color = color_sequence_from_colorname(color);
++		if (!color)
++			return -EINVAL;
+ 	}
+-
+-	free(ln->color);
+-	ln->color = p;
+-	return 0;
++	return strdup_to_struct_member(ln, color, color);
+ }
+ 
+ /**
+@@ -325,22 +355,20 @@ int scols_line_set_color(struct libscols_line *ln, const char *color)
+  *
+  * Returns: @ln's color string, NULL in case of an error.
+  */
+-const char *scols_line_get_color(struct libscols_line *ln)
++const char *scols_line_get_color(const struct libscols_line *ln)
+ {
+-	assert(ln);
+-	return ln ? ln->color : NULL;
++	return ln->color;
+ }
+ 
+ /**
+  * scols_line_get_ncells:
+  * @ln: a pointer to a struct libscols_line instance
+  *
+- * Returns: @ln's number of cells
++ * Returns: number of cells
+  */
+-size_t scols_line_get_ncells(struct libscols_line *ln)
++size_t scols_line_get_ncells(const struct libscols_line *ln)
+ {
+-	assert(ln);
+-	return ln ? ln->ncells : 0;
++	return ln->ncells;
+ }
+ 
+ /**
+@@ -353,8 +381,6 @@ size_t scols_line_get_ncells(struct libscols_line *ln)
+ struct libscols_cell *scols_line_get_cell(struct libscols_line *ln,
+ 					  size_t n)
+ {
+-	assert(ln);
+-
+ 	if (!ln || n >= ln->ncells)
+ 		return NULL;
+ 	return &ln->cells[n];
+@@ -373,15 +399,15 @@ struct libscols_cell *scols_line_get_column_cell(
+ 			struct libscols_line *ln,
+ 			struct libscols_column *cl)
+ {
+-	assert(ln);
+-	assert(cl);
++	if (!ln || !cl)
++		return NULL;
+ 
+ 	return scols_line_get_cell(ln, cl->seqnum);
+ }
+ 
+ /**
+  * scols_line_set_data:
+- * @ln: a pointer to a struct libscols_cell instance
++ * @ln: a pointer to a struct libscols_line instance
+  * @n: number of the cell, whose data is to be set
+  * @data: actual data to set
+  *
+@@ -396,9 +422,28 @@ int scols_line_set_data(struct libscols_line *ln, size_t n, const char *data)
+ 	return scols_cell_set_data(ce, data);
+ }
+ 
++/**
++ * scols_line_set_column_data:
++ * @ln: a pointer to a struct libscols_line instance
++ * @cl: column, whose data is to be set
++ * @data: actual data to set
++ *
++ * The same as scols_line_set_data() but cell is referenced by column object.
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.28
++ */
++int scols_line_set_column_data(struct libscols_line *ln,
++			       struct libscols_column *cl,
++			       const char *data)
++{
++	return scols_line_set_data(ln, cl->seqnum, data);
++}
++
+ /**
+  * scols_line_refer_data:
+- * @ln: a pointer to a struct libscols_cell instance
++ * @ln: a pointer to a struct libscols_line instance
+  * @n: number of the cell which will refer to @data
+  * @data: actual data to refer to
+  *
+@@ -413,18 +458,36 @@ int scols_line_refer_data(struct libscols_line *ln, size_t n, char *data)
+ 	return scols_cell_refer_data(ce, data);
+ }
+ 
++/**
++ * scols_line_refer_column_data:
++ * @ln: a pointer to a struct libscols_line instance
++ * @cl: column, whose data is to be set
++ * @data: actual data to refer to
++ *
++ * The same as scols_line_refer_data() but cell is referenced by column object.
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.28
++ */
++int scols_line_refer_column_data(struct libscols_line *ln,
++			       struct libscols_column *cl,
++			       char *data)
++{
++	return scols_line_refer_data(ln, cl->seqnum, data);
++}
++
+ /**
+  * scols_copy_line:
+- * @ln: a pointer to a struct libscols_cell instance
++ * @ln: a pointer to a struct libscols_line instance
+  *
+  * Returns: A newly allocated copy of @ln, NULL in case of an error.
+  */
+-struct libscols_line *scols_copy_line(struct libscols_line *ln)
++struct libscols_line *scols_copy_line(const struct libscols_line *ln)
+ {
+ 	struct libscols_line *ret;
+ 	size_t i;
+ 
+-	assert (ln);
+ 	if (!ln)
+ 		return NULL;
+ 
+@@ -440,7 +503,7 @@ struct libscols_line *scols_copy_line(struct libscols_line *ln)
+ 	ret->ncells   = ln->ncells;
+ 	ret->seqnum   = ln->seqnum;
+ 
+-	DBG(LINE, ul_debugobj(ln, "copy to %p", ret));
++	DBG(LINE, ul_debugobj(ln, "copy"));
+ 
+ 	for (i = 0; i < ret->ncells; ++i) {
+ 		if (scols_cell_copy_content(&ret->cells[i], &ln->cells[i]))
+@@ -452,5 +515,3 @@ err:
+ 	scols_unref_line(ret);
+ 	return NULL;
+ }
+-
+-
+diff --git a/libsmartcols/src/smartcolsP.h b/libsmartcols/src/smartcolsP.h
+index cea4f3101..398e6f064 100644
+--- a/libsmartcols/src/smartcolsP.h
++++ b/libsmartcols/src/smartcolsP.h
+@@ -13,23 +13,18 @@
+ 
+ #include "c.h"
+ #include "list.h"
++#include "strutils.h"
+ #include "colors.h"
+ #include "debug.h"
+ 
+-#include "libsmartcols.h"
+-
+-/* features */
+-#define CONFIG_LIBSMARTCOLS_ASSERT
++#include <assert.h>
+ 
+-#ifdef CONFIG_LIBSMARTCOLS_ASSERT
+-# include <assert.h>
+-#else
+-# define assert(x)
+-#endif
++#include "libsmartcols.h"
+ 
+ /*
+  * Debug
+  */
++#define SCOLS_DEBUG_HELP	(1 << 0)
+ #define SCOLS_DEBUG_INIT	(1 << 1)
+ #define SCOLS_DEBUG_CELL	(1 << 2)
+ #define SCOLS_DEBUG_LINE	(1 << 3)
+@@ -43,7 +38,7 @@ UL_DEBUG_DECLARE_MASK(libsmartcols);
+ #define ON_DBG(m, x)	__UL_DBG_CALL(libsmartcols, SCOLS_DEBUG_, m, x)
+ #define DBG_FLUSH	__UL_DBG_FLUSH(libsmartcols, SCOLS_DEBUG_)
+ 
+-#define UL_DEBUG_CURRENT_MASK  UL_DEBUG_MASK(libsmartcols)
++#define UL_DEBUG_CURRENT_MASK	UL_DEBUG_MASK(libsmartcols)
+ #include "debugobj.h"
+ 
+ /*
+@@ -63,6 +58,8 @@ struct libscols_symbols {
+ 	char	*branch;
+ 	char	*vert;
+ 	char	*right;
++	char	*title_padding;
++	char	*cell_padding;
+ };
+ 
+ /*
+@@ -72,8 +69,10 @@ struct libscols_cell {
+ 	char	*data;
+ 	char	*color;
+ 	void    *userdata;
++	int	flags;
+ };
+ 
++extern int scols_line_move_cells(struct libscols_line *ln, size_t newn, size_t oldn);
+ 
+ /*
+  * Table column
+@@ -86,19 +85,36 @@ struct libscols_column {
+ 	size_t	width_min;	/* minimal width (usually header width) */
+ 	size_t  width_max;	/* maximal width */
+ 	size_t  width_avg;	/* average width, used to detect extreme fields */
++	size_t	width_treeart;	/* size of the tree ascii art */
+ 	double	width_hint;	/* hint (N < 1 is in percent of termwidth) */
+ 
++	int	json_type;	/* SCOLS_JSON_* */
++
+ 	int	flags;
+ 	int	is_extreme;
+ 	char	*color;		/* default column color */
++	char	*safechars;	/* do not encode this bytes */
++
++	char	*pending_data;
++	size_t	pending_data_sz;
++	char	*pending_data_buf;
+ 
+ 	int (*cmpfunc)(struct libscols_cell *,
+ 		       struct libscols_cell *,
+ 		       void *);			/* cells comparison function */
+ 	void *cmpfunc_data;
+ 
++	size_t (*wrap_chunksize)(const struct libscols_column *,
++			const char *, void *);
++	char *(*wrap_nextchunk)(const struct libscols_column *,
++			char *, void *);
++	void *wrapfunc_data;
++
++
+ 	struct libscols_cell	header;
+ 	struct list_head	cl_columns;
++
++	struct libscols_table	*table;
+ };
+ 
+ /*
+@@ -124,7 +140,8 @@ struct libscols_line {
+ enum {
+ 	SCOLS_FMT_HUMAN = 0,		/* default, human readable */
+ 	SCOLS_FMT_RAW,			/* space separated */
+-	SCOLS_FMT_EXPORT		/* COLNAME="data" ... */
++	SCOLS_FMT_EXPORT,		/* COLNAME="data" ... */
++	SCOLS_FMT_JSON			/* http://en.wikipedia.org/wiki/JSON */
+ };
+ 
+ /*
+@@ -132,11 +149,14 @@ enum {
+  */
+ struct libscols_table {
+ 	int	refcount;
++	char	*name;		/* optional table name (for JSON) */
+ 	size_t	ncols;		/* number of columns */
+ 	size_t  ntreecols;	/* number of columns with SCOLS_FL_TREE */
+ 	size_t	nlines;		/* number of lines */
+-	size_t	termwidth;	/* terminal width */
++	size_t	termwidth;	/* terminal width (number of columns) */
++	size_t  termheight;	/* terminal height  (number of lines) */
+ 	size_t  termreduce;	/* extra blank space */
++	int	termforce;	/* SCOLS_TERMFORCE_* */
+ 	FILE	*out;		/* output stream */
+ 
+ 	char	*colsep;	/* column separator */
+@@ -145,15 +165,28 @@ struct libscols_table {
+ 	struct list_head	tb_columns;
+ 	struct list_head	tb_lines;
+ 	struct libscols_symbols	*symbols;
++	struct libscols_cell	title;		/* optional table title (for humans) */
+ 
++	int	indent;		/* indention counter */
++	int	indent_last_sep;/* last printed has been line separator */
+ 	int	format;		/* SCOLS_FMT_* */
+ 
++	size_t	termlines_used;	/* printed line counter */
++	size_t	header_next;	/* where repeat header */
++
+ 	/* flags */
+ 	unsigned int	ascii		:1,	/* don't use unicode */
+ 			colors_wanted	:1,	/* enable colors */
+ 			is_term		:1,	/* isatty() */
+-			maxout		:1,	/* maximalize output */
+-			no_headings	:1;	/* don't print header */
++			padding_debug	:1,	/* output visible padding chars */
++			maxout		:1,	/* maximize output */
++			header_repeat   :1,     /* print header after libscols_table->termheight */
++			header_printed  :1,	/* header already printed */
++			priv_symbols	:1,	/* default private symbols */
++			no_headings	:1,	/* don't print header */
++			no_encode	:1,	/* don't care about control and non-printable chars */
++			no_linesep	:1,	/* don't print line separator */
++			no_wrap		:1;	/* never wrap lines */
+ };
+ 
+ #define IS_ITER_FORWARD(_i)	((_i)->direction == SCOLS_ITER_FORWARD)
+@@ -173,4 +206,13 @@ struct libscols_table {
+ 				(itr)->p->next : (itr)->p->prev; \
+ 	} while(0)
+ 
++
++static inline int scols_iter_is_last(const struct libscols_iter *itr)
++{
++	if (!itr || !itr->head || !itr->p)
++		return 0;
++
++	return itr->p == itr->head;
++}
++
+ #endif /* _LIBSMARTCOLS_PRIVATE_H */
+diff --git a/libsmartcols/src/symbols.c b/libsmartcols/src/symbols.c
+index 2b8f81dc9..6ddf1869b 100644
+--- a/libsmartcols/src/symbols.c
++++ b/libsmartcols/src/symbols.c
+@@ -2,6 +2,7 @@
+  * symbols.c - routines for symbol handling
+  *
+  * Copyright (C) 2014 Ondrej Oprala <ooprala@redhat.com>
++ * Copyright (C) 2016 Igor Gnatenko <i.gnatenko.brain@gmail.com>
+  *
+  * This file may be redistributed under the terms of the
+  * GNU Lesser General Public License.
+@@ -10,7 +11,7 @@
+ /**
+  * SECTION: symbols
+  * @title: Symbols
+- * @short_description: symbols API
++ * @short_description: allows to overwrite default output chars (for ascii art)
+  *
+  * An API to access and modify data and information per symbol/symbol group.
+  */
+@@ -61,115 +62,112 @@ void scols_unref_symbols(struct libscols_symbols *sy)
+ 		free(sy->branch);
+ 		free(sy->vert);
+ 		free(sy->right);
++		free(sy->title_padding);
++		free(sy->cell_padding);
+ 		free(sy);
+ 	}
+ }
+ 
+ /**
+  * scols_symbols_set_branch:
+- * @sb: a pointer to a struct libscols_symbols instance
++ * @sy: a pointer to a struct libscols_symbols instance
+  * @str: a string which will represent the branch part of a tree output
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+-int scols_symbols_set_branch(struct libscols_symbols *sb, const char *str)
++int scols_symbols_set_branch(struct libscols_symbols *sy, const char *str)
+ {
+-	char *p = NULL;
+-
+-	assert(sb);
+-
+-	if (!sb)
+-		return -EINVAL;
+-	if (str) {
+-		p = strdup(str);
+-		if (!p)
+-			return -ENOMEM;
+-	}
+-	free(sb->branch);
+-	sb->branch = p;
+-	return 0;
++	return strdup_to_struct_member(sy, branch, str);
+ }
+ 
+ /**
+  * scols_symbols_set_vertical:
+- * @sb: a pointer to a struct libscols_symbols instance
++ * @sy: a pointer to a struct libscols_symbols instance
+  * @str: a string which will represent the vertical part of a tree output
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+-int scols_symbols_set_vertical(struct libscols_symbols *sb, const char *str)
++int scols_symbols_set_vertical(struct libscols_symbols *sy, const char *str)
+ {
+-	char *p = NULL;
+-
+-	assert(sb);
+-
+-	if (!sb)
+-		return -EINVAL;
+-	if (str) {
+-		p = strdup(str);
+-		if (!p)
+-			return -ENOMEM;
+-	}
+-	free(sb->vert);
+-	sb->vert = p;
+-	return 0;
++	return strdup_to_struct_member(sy, vert, str);
+ }
+ 
+ /**
+  * scols_symbols_set_right:
+- * @sb: a pointer to a struct libscols_symbols instance
++ * @sy: a pointer to a struct libscols_symbols instance
+  * @str: a string which will represent the right part of a tree output
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+-int scols_symbols_set_right(struct libscols_symbols *sb, const char *str)
++int scols_symbols_set_right(struct libscols_symbols *sy, const char *str)
+ {
+-	char *p = NULL;
++	return strdup_to_struct_member(sy, right, str);
++}
+ 
+-	assert(sb);
++/**
++ * scols_symbols_set_title_padding:
++ * @sy: a pointer to a struct libscols_symbols instance
++ * @str: a string which will represent the symbols which fill title output
++ *
++ * The current implementation uses only the first byte from the padding string.
++ * A multibyte chars are not supported yet.
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.28
++ */
++int scols_symbols_set_title_padding(struct libscols_symbols *sy, const char *str)
++{
++	return strdup_to_struct_member(sy, title_padding, str);
++}
+ 
+-	if (!sb)
+-		return -EINVAL;
+-	if (str) {
+-		p = strdup(str);
+-		if (!p)
+-			return -ENOMEM;
+-	}
+-	free(sb->right);
+-	sb->right = p;
+-	return 0;
++/**
++ * scols_symbols_set_cell_padding:
++ * @sy: a pointer to a struct libscols_symbols instance
++ * @str: a string which will represent the symbols which fill cells
++ *
++ * The padding char has to take up just one cell on the terminal.
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.29
++ */
++int scols_symbols_set_cell_padding(struct libscols_symbols *sy, const char *str)
++{
++	return strdup_to_struct_member(sy, cell_padding, str);
+ }
+ 
+ /**
+  * scols_copy_symbols:
+- * @sb: a pointer to a struct libscols_symbols instance
++ * @sy: a pointer to a struct libscols_symbols instance
+  *
+- * Returns: a newly allocated copy of the @sb symbol group or NULL in caes of an error.
++ * Returns: a newly allocated copy of the @sy symbol group or NULL in case of an error.
+  */
+-struct libscols_symbols *scols_copy_symbols(const struct libscols_symbols *sb)
++struct libscols_symbols *scols_copy_symbols(const struct libscols_symbols *sy)
+ {
+ 	struct libscols_symbols *ret;
+ 	int rc;
+ 
+-	assert(sb);
+-	if (!sb)
++	assert(sy);
++	if (!sy)
+ 		return NULL;
+ 
+ 	ret = scols_new_symbols();
+ 	if (!ret)
+ 		return NULL;
+ 
+-	rc = scols_symbols_set_branch(ret, sb->branch);
++	rc = scols_symbols_set_branch(ret, sy->branch);
++	if (!rc)
++		rc = scols_symbols_set_vertical(ret, sy->vert);
+ 	if (!rc)
+-		rc = scols_symbols_set_vertical(ret, sb->vert);
++		rc = scols_symbols_set_right(ret, sy->right);
+ 	if (!rc)
+-		rc = scols_symbols_set_right(ret, sb->right);
++		rc = scols_symbols_set_title_padding(ret, sy->title_padding);
++	if (!rc)
++		rc = scols_symbols_set_cell_padding(ret, sy->cell_padding);
+ 	if (!rc)
+ 		return ret;
+ 
+ 	scols_unref_symbols(ret);
+ 	return NULL;
+-
+ }
+-
+-
+diff --git a/libsmartcols/src/table.c b/libsmartcols/src/table.c
+index 8c404f858..979a09a39 100644
+--- a/libsmartcols/src/table.c
++++ b/libsmartcols/src/table.c
+@@ -3,6 +3,7 @@
+  *
+  * Copyright (C) 2010-2014 Karel Zak <kzak@redhat.com>
+  * Copyright (C) 2014 Ondrej Oprala <ooprala@redhat.com>
++ * Copyright (C) 2016 Igor Gnatenko <i.gnatenko.brain@gmail.com>
+  *
+  * This file may be redistributed under the terms of the
+  * GNU Lesser General Public License.
+@@ -11,7 +12,7 @@
+ /**
+  * SECTION: table
+  * @title: Table
+- * @short_description: table data API
++ * @short_description: container for rows and columns
+  *
+  * Table data manipulation API.
+  */
+@@ -24,7 +25,7 @@
+ #include <ctype.h>
+ 
+ #include "nls.h"
+-#include "widechar.h"
++#include "ttyutils.h"
+ #include "smartcolsP.h"
+ 
+ #ifdef HAVE_WIDECHAR
+@@ -38,6 +39,20 @@
+ 		list_entry_is_last(&(_cl)->cl_columns, &(_tb)->tb_columns)
+ 
+ 
++static void check_padding_debug(struct libscols_table *tb)
++{
++	const char *str;
++
++	assert(libsmartcols_debug_mask);	/* debug has to be enabled! */
++
++	str = getenv("LIBSMARTCOLS_DEBUG_PADDING");
++	if (!str || (strcmp(str, "on") != 0 && strcmp(str, "1") != 0))
++		return;
++
++	DBG(INIT, ul_debugobj(tb, "padding debug: ENABLE"));
++	tb->padding_debug = 1;
++}
++
+ /**
+  * scols_new_table:
+  *
+@@ -46,6 +61,7 @@
+ struct libscols_table *scols_new_table(void)
+ {
+ 	struct libscols_table *tb;
++	int c, l;
+ 
+ 	tb = calloc(1, sizeof(struct libscols_table));
+ 	if (!tb)
+@@ -54,10 +70,16 @@ struct libscols_table *scols_new_table(void)
+ 	tb->refcount = 1;
+ 	tb->out = stdout;
+ 
++	get_terminal_dimension(&c, &l);
++	tb->termwidth  = c > 0 ? c : 80;
++	tb->termheight = l > 0 ? l : 24;
++
+ 	INIT_LIST_HEAD(&tb->tb_lines);
+ 	INIT_LIST_HEAD(&tb->tb_columns);
+ 
+ 	DBG(TAB, ul_debugobj(tb, "alloc"));
++	ON_DBG(INIT, check_padding_debug(tb));
++
+ 	return tb;
+ }
+ 
+@@ -87,44 +109,102 @@ void scols_unref_table(struct libscols_table *tb)
+ 		scols_table_remove_lines(tb);
+ 		scols_table_remove_columns(tb);
+ 		scols_unref_symbols(tb->symbols);
++		scols_reset_cell(&tb->title);
+ 		free(tb->linesep);
+ 		free(tb->colsep);
++		free(tb->name);
+ 		free(tb);
+ 	}
+ }
+ 
++/**
++ * scols_table_set_name:
++ * @tb: a pointer to a struct libscols_table instance
++ * @name: a name
++ *
++ * The table name is used for example for JSON top level object name.
++ *
++ * Returns: 0, a negative number in case of an error.
++ *
++ * Since: 2.27
++ */
++int scols_table_set_name(struct libscols_table *tb, const char *name)
++{
++	return strdup_to_struct_member(tb, name, name);
++}
++
++/**
++ * scols_table_get_name:
++ * @tb: a pointer to a struct libscols_table instance
++ *
++ * Returns: The current name setting of the table @tb
++ *
++ * Since: 2.29
++ */
++const char *scols_table_get_name(const struct libscols_table *tb)
++{
++	return tb->name;
++}
++
++/**
++ * scols_table_get_title:
++ * @tb: a pointer to a struct libscols_table instance
++ *
++ * The returned pointer is possible to modify by cell functions. Note that
++ * title output alignment on non-tty is hardcoded to 80 output chars. For the
++ * regular terminal it's based on terminal width.
++ *
++ * Returns: Title of the table, or NULL in case of blank title.
++ *
++ * Since: 2.28
++ */
++struct libscols_cell *scols_table_get_title(struct libscols_table *tb)
++{
++	return &tb->title;
++}
++
+ /**
+  * scols_table_add_column:
+  * @tb: a pointer to a struct libscols_table instance
+  * @cl: a pointer to a struct libscols_column instance
+  *
+- * Adds @cl to @tb's column list.
++ * Adds @cl to @tb's column list. The column cannot be shared between more
++ * tables.
+  *
+  * Returns: 0, a negative number in case of an error.
+  */
+ int scols_table_add_column(struct libscols_table *tb, struct libscols_column *cl)
+ {
+-	assert(tb);
+-	assert(cl);
++	struct libscols_iter itr;
++	struct libscols_line *ln;
++	int rc = 0;
+ 
+-	if (!tb || !cl || !list_empty(&tb->tb_lines))
++	if (!tb || !cl || cl->table)
+ 		return -EINVAL;
+ 
+ 	if (cl->flags & SCOLS_FL_TREE)
+ 		tb->ntreecols++;
+ 
+-	DBG(TAB, ul_debugobj(tb, "add column %p", cl));
++	DBG(TAB, ul_debugobj(tb, "add column"));
+ 	list_add_tail(&cl->cl_columns, &tb->tb_columns);
+ 	cl->seqnum = tb->ncols++;
++	cl->table = tb;
+ 	scols_ref_column(cl);
+ 
+-	/* TODO:
+-	 *
+-	 * Currently it's possible to add/remove columns only if the table is
+-	 * empty (see list_empty(tb->tb_lines) above). It would be nice to
+-	 * enlarge/reduce lines cells[] always when we add/remove a new column.
++	if (list_empty(&tb->tb_lines))
++		return 0;
++
++	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++
++	/* Realloc line cell arrays
+ 	 */
+-	return 0;
++	while (scols_table_next_line(tb, &itr, &ln) == 0) {
++		rc = scols_line_alloc_cells(ln, tb->ncols);
++		if (rc)
++			break;
++	}
++
++	return rc;
+ }
+ 
+ /**
+@@ -139,18 +219,16 @@ int scols_table_add_column(struct libscols_table *tb, struct libscols_column *cl
+ int scols_table_remove_column(struct libscols_table *tb,
+ 			      struct libscols_column *cl)
+ {
+-	assert(tb);
+-	assert(cl);
+-
+ 	if (!tb || !cl || !list_empty(&tb->tb_lines))
+ 		return -EINVAL;
+ 
+ 	if (cl->flags & SCOLS_FL_TREE)
+ 		tb->ntreecols--;
+ 
+-	DBG(TAB, ul_debugobj(tb, "remove column %p", cl));
++	DBG(TAB, ul_debugobj(tb, "remove column"));
+ 	list_del_init(&cl->cl_columns);
+ 	tb->ncols--;
++	cl->table = NULL;
+ 	scols_unref_column(cl);
+ 	return 0;
+ }
+@@ -165,8 +243,6 @@ int scols_table_remove_column(struct libscols_table *tb,
+  */
+ int scols_table_remove_columns(struct libscols_table *tb)
+ {
+-	assert(tb);
+-
+ 	if (!tb || !list_empty(&tb->tb_lines))
+ 		return -EINVAL;
+ 
+@@ -179,12 +255,64 @@ int scols_table_remove_columns(struct libscols_table *tb)
+ 	return 0;
+ }
+ 
++/**
++ * scols_table_move_column:
++ * @tb: table
++ * @pre: column before the column
++ * @cl: column to move
++ *
++ * Move the @cl behind @pre. If the @pre is NULL then the @col is the first
++ * column in the table.
++ *
++ * Since: 2.30
++ *
++ * Returns: 0, a negative number in case of an error.
++ */
++int scols_table_move_column(struct libscols_table *tb,
++			    struct libscols_column *pre,
++			    struct libscols_column *cl)
++{
++	struct list_head *head;
++	struct libscols_iter itr;
++	struct libscols_column *p;
++	struct libscols_line *ln;
++	size_t n = 0, oldseq;
++
++	if (!tb || !cl)
++		return -EINVAL;
++
++	if (pre && pre->seqnum + 1 == cl->seqnum)
++		return 0;
++	if (pre == NULL && cl->seqnum == 0)
++		return 0;
++
++	DBG(TAB, ul_debugobj(tb, "move column %zu behind %zu",
++				cl->seqnum, pre? pre->seqnum : 0));
++
++	list_del_init(&cl->cl_columns);		/* remove from old position */
++
++	head = pre ? &pre->cl_columns : &tb->tb_columns;
++	list_add(&cl->cl_columns, head);	/* add to the new place */
++
++	oldseq = cl->seqnum;
++
++	/* fix seq. numbers */
++	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++	while (scols_table_next_column(tb, &itr, &p) == 0)
++		p->seqnum = n++;
++
++	/* move data in lines */
++	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++	while (scols_table_next_line(tb, &itr, &ln) == 0)
++		scols_line_move_cells(ln, cl->seqnum, oldseq);
++	return 0;
++}
+ 
+ /**
+  * scols_table_new_column:
+  * @tb: table
+  * @name: column header
+- * @whint: column width hint (absolute width: N > 1; relative width: N < 1)
++ * @whint: column width hint (absolute width: N > 1; relative width: 0 < N < 1)
+  * @flags: flags integer
+  *
+  * This is shortcut for
+@@ -193,17 +321,36 @@ int scols_table_remove_columns(struct libscols_table *tb)
+  *   scols_column_set_....(cl, ...);
+  *   scols_table_add_column(tb, cl);
+  *
+- * The column width is possible to define by three ways:
++ * The column width is possible to define by:
++ *
++ *  @whint: 0 < N < 1  : relative width, percent of terminal width
++ *
++ *  @whint: N >= 1     : absolute width, empty column will be truncated to
++ *                     the column header width if no specified STRICTWIDTH flag
+  *
+- *  @whint = 0..1    : relative width, percent of terminal width
++ * Note that if table has disabled "maxout" flag (disabled by default) than
++ * relative width is used as a hint only. It's possible that column will be
++ * narrow if the specified size is too large for column data.
+  *
+- *  @whint = 1..N    : absolute width, empty colum will be truncated to
+- *                     the column header width
+  *
+- *  @whint = 1..N
++ * If the width of all columns is greater than terminal width then library
++ * tries to reduce width of the individual columns. It's done in three stages:
+  *
+- * The column is necessary to address by
+- * sequential number. The first defined column has the colnum = 0. For example:
++ * #1 reduce columns with SCOLS_FL_TRUNC flag and with relative width if the
++ *    width is greater than width defined by @whint (@whint * terminal_width)
++ *
++ * #2 reduce all columns with SCOLS_FL_TRUNC flag
++ *
++ * #3 reduce all columns with relative width
++ *
++ * The next stage is always used if the previous stage is unsuccessful. Note
++ * that SCOLS_FL_WRAP is interpreted as SCOLS_FL_TRUNC when calculate column
++ * width (if custom wrap function is not specified), but the final text is not
++ * truncated, but wrapped to multi-line cell.
++ *
++ *
++ * The column is necessary to address by sequential number. The first defined
++ * column has the colnum = 0. For example:
+  *
+  *	scols_table_new_column(tab, "FOO", 0.5, 0);		// colnum = 0
+  *	scols_table_new_column(tab, "BAR", 0.5, 0);		// colnum = 1
+@@ -222,7 +369,6 @@ struct libscols_column *scols_table_new_column(struct libscols_table *tb,
+ 	struct libscols_column *cl;
+ 	struct libscols_cell *hr;
+ 
+-	assert (tb);
+ 	if (!tb)
+ 		return NULL;
+ 
+@@ -282,29 +428,26 @@ int scols_table_next_column(struct libscols_table *tb,
+ 	return rc;
+ }
+ 
+-
+ /**
+  * scols_table_get_ncols:
+  * @tb: table
+  *
+- * Returns: the ncols table member, a negative number in case of an error.
++ * Returns: the ncols table member.
+  */
+-int scols_table_get_ncols(struct libscols_table *tb)
++size_t scols_table_get_ncols(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb ? tb->ncols : -EINVAL;
++	return tb->ncols;
+ }
+ 
+ /**
+  * scols_table_get_nlines:
+  * @tb: table
+  *
+- * Returns: the nlines table member, a negative number in case of an error.
++ * Returns: the nlines table member.
+  */
+-int scols_table_get_nlines(struct libscols_table *tb)
++size_t scols_table_get_nlines(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb ? tb->nlines : -EINVAL;
++	return tb->nlines;
+ }
+ 
+ /**
+@@ -335,10 +478,9 @@ int scols_table_set_stream(struct libscols_table *tb, FILE *stream)
+  *
+  * Returns: stream pointer, NULL in case of an error or an unset stream.
+  */
+-FILE *scols_table_get_stream(struct libscols_table *tb)
++FILE *scols_table_get_stream(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb ? tb->out: NULL;
++	return tb->out;
+ }
+ 
+ /**
+@@ -346,13 +488,20 @@ FILE *scols_table_get_stream(struct libscols_table *tb)
+  * @tb: table
+  * @reduce: width
+  *
+- * Reduce the output width to @reduce.
++ * If necessary then libsmartcols use all terminal width, the @reduce setting
++ * provides extra space (for example for borders in ncurses applications).
++ *
++ * The @reduce must be smaller than terminal width, otherwise it's silently
++ * ignored. The reduction is not applied when STDOUT_FILENO is not terminal.
++ *
++ * Note that after output initialization (scols_table_print_* calls) the width
++ * will be reduced, this behavior affects subsequenced scols_table_get_termwidth()
++ * calls.
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+ int scols_table_reduce_termwidth(struct libscols_table *tb, size_t reduce)
+ {
+-	assert(tb);
+ 	if (!tb)
+ 		return -EINVAL;
+ 
+@@ -374,7 +523,6 @@ struct libscols_column *scols_table_get_column(struct libscols_table *tb,
+ 	struct libscols_iter itr;
+ 	struct libscols_column *cl;
+ 
+-	assert(tb);
+ 	if (!tb)
+ 		return NULL;
+ 	if (n >= tb->ncols)
+@@ -400,11 +548,7 @@ struct libscols_column *scols_table_get_column(struct libscols_table *tb,
+  */
+ int scols_table_add_line(struct libscols_table *tb, struct libscols_line *ln)
+ {
+-
+-	assert(tb);
+-	assert(ln);
+-
+-	if (!tb || !ln)
++	if (!tb || !ln || tb->ncols == 0)
+ 		return -EINVAL;
+ 
+ 	if (tb->ncols > ln->ncells) {
+@@ -413,7 +557,7 @@ int scols_table_add_line(struct libscols_table *tb, struct libscols_line *ln)
+ 			return rc;
+ 	}
+ 
+-	DBG(TAB, ul_debugobj(tb, "add line %p", ln));
++	DBG(TAB, ul_debugobj(tb, "add line"));
+ 	list_add_tail(&ln->ln_lines, &tb->tb_lines);
+ 	ln->seqnum = tb->nlines++;
+ 	scols_ref_line(ln);
+@@ -433,13 +577,10 @@ int scols_table_add_line(struct libscols_table *tb, struct libscols_line *ln)
+ int scols_table_remove_line(struct libscols_table *tb,
+ 			    struct libscols_line *ln)
+ {
+-	assert(tb);
+-	assert(ln);
+-
+ 	if (!tb || !ln)
+ 		return -EINVAL;
+ 
+-	DBG(TAB, ul_debugobj(tb, "remove line %p", ln));
++	DBG(TAB, ul_debugobj(tb, "remove line"));
+ 	list_del_init(&ln->ln_lines);
+ 	tb->nlines--;
+ 	scols_unref_line(ln);
+@@ -454,7 +595,6 @@ int scols_table_remove_line(struct libscols_table *tb,
+  */
+ void scols_table_remove_lines(struct libscols_table *tb)
+ {
+-	assert(tb);
+ 	if (!tb)
+ 		return;
+ 
+@@ -517,9 +657,6 @@ struct libscols_line *scols_table_new_line(struct libscols_table *tb,
+ {
+ 	struct libscols_line *ln;
+ 
+-	assert(tb);
+-	assert(tb->ncols);
+-
+ 	if (!tb || !tb->ncols)
+ 		return NULL;
+ 
+@@ -544,13 +681,7 @@ err:
+  * @tb: table
+  * @n: column number (0..N)
+  *
+- * This is a shortcut for
+- *
+- *   ln = scols_new_line();
+- *   scols_line_set_....(cl, ...);
+- *   scols_table_add_line(tb, ln);
+- *
+- * Returns: a newly allocate line
++ * Returns: a line or NULL
+  */
+ struct libscols_line *scols_table_get_line(struct libscols_table *tb,
+ 					   size_t n)
+@@ -558,7 +689,6 @@ struct libscols_line *scols_table_get_line(struct libscols_table *tb,
+ 	struct libscols_iter itr;
+ 	struct libscols_line *ln;
+ 
+-	assert(tb);
+ 	if (!tb)
+ 		return NULL;
+ 	if (n >= tb->nlines)
+@@ -588,14 +718,13 @@ struct libscols_table *scols_copy_table(struct libscols_table *tb)
+ 	struct libscols_column *cl;
+ 	struct libscols_iter itr;
+ 
+-	assert(tb);
+ 	if (!tb)
+ 		return NULL;
+ 	ret = scols_new_table();
+ 	if (!ret)
+ 		return NULL;
+ 
+-	DBG(TAB, ul_debugobj(tb, "copy into %p", ret));
++	DBG(TAB, ul_debugobj(tb, "copy"));
+ 
+ 	if (tb->symbols)
+ 		scols_table_set_symbols(ret, tb->symbols);
+@@ -639,54 +768,141 @@ err:
+ 	return NULL;
+ }
+ 
++/**
++ * scols_table_set_default_symbols:
++ * @tb: table
++ *
++ * The library check the current environment to select ASCII or UTF8 symbols.
++ * This default behavior could be controlled by scols_table_enable_ascii().
++ *
++ * Use scols_table_set_symbols() to unset symbols or use your own setting.
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.29
++ */
++int scols_table_set_default_symbols(struct libscols_table *tb)
++{
++	struct libscols_symbols *sy;
++	int rc;
++
++	if (!tb)
++		return -EINVAL;
++
++	DBG(TAB, ul_debugobj(tb, "setting default symbols"));
++
++	sy = scols_new_symbols();
++	if (!sy)
++		return -ENOMEM;
++
++#if defined(HAVE_WIDECHAR)
++	if (!scols_table_is_ascii(tb) &&
++	    !strcmp(nl_langinfo(CODESET), "UTF-8")) {
++		scols_symbols_set_branch(sy, UTF_VR UTF_H);
++		scols_symbols_set_vertical(sy, UTF_V " ");
++		scols_symbols_set_right(sy, UTF_UR UTF_H);
++	} else
++#endif
++	{
++		scols_symbols_set_branch(sy, "|-");
++		scols_symbols_set_vertical(sy, "| ");
++		scols_symbols_set_right(sy, "`-");
++	}
++	scols_symbols_set_title_padding(sy, " ");
++	scols_symbols_set_cell_padding(sy, " ");
++
++	rc = scols_table_set_symbols(tb, sy);
++	scols_unref_symbols(sy);
++	return rc;
++}
++
++
+ /**
+  * scols_table_set_symbols:
+  * @tb: table
+  * @sy: symbols or NULL
+  *
+  * Add a reference to @sy from the table. The symbols are used by library to
+- * draw tree output. If no symbols are specified then library checks the
+- * current environment to select ASCII or UTF8 symbols. This default behavior
+- * could be controlled by scols_table_enable_ascii().
++ * draw tree output. If no symbols are used for the table then library creates
++ * default temporary symbols to draw output by scols_table_set_default_symbols().
++ *
++ * If @sy is NULL then remove reference from the currently used symbols.
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+ int scols_table_set_symbols(struct libscols_table *tb,
+ 			    struct libscols_symbols *sy)
+ {
+-	assert(tb);
+-
+ 	if (!tb)
+ 		return -EINVAL;
+ 
+-	DBG(TAB, ul_debugobj(tb, "setting alternative symbols %p", sy));
+-
+-	if (tb->symbols)				/* unref old */
++	/* remove old */
++	if (tb->symbols) {
++		DBG(TAB, ul_debugobj(tb, "remove symbols reference"));
+ 		scols_unref_symbols(tb->symbols);
++		tb->symbols = NULL;
++	}
++
++	/* set new */
+ 	if (sy) {					/* ref user defined */
++		DBG(TAB, ul_debugobj(tb, "set symbols"));
+ 		tb->symbols = sy;
+ 		scols_ref_symbols(sy);
+-	} else {					/* default symbols */
+-		tb->symbols = scols_new_symbols();
+-		if (!tb->symbols)
+-			return -ENOMEM;
+-#if defined(HAVE_WIDECHAR)
+-		if (!scols_table_is_ascii(tb) &&
+-		    !strcmp(nl_langinfo(CODESET), "UTF-8")) {
+-			scols_symbols_set_branch(tb->symbols, UTF_VR UTF_H);
+-			scols_symbols_set_vertical(tb->symbols, UTF_V " ");
+-			scols_symbols_set_right(tb->symbols, UTF_UR UTF_H);
+-		} else
+-#endif
+-		{
+-			scols_symbols_set_branch(tb->symbols, "|-");
+-			scols_symbols_set_vertical(tb->symbols, "| ");
+-			scols_symbols_set_right(tb->symbols, "`-");
+-		}
+ 	}
++	return 0;
++}
++
++/**
++ * scols_table_get_symbols:
++ * @tb: table
++ *
++ * Returns: pointer to symbols table.
++ *
++ * Since: 2.29
++ */
++struct libscols_symbols *scols_table_get_symbols(const struct libscols_table *tb)
++{
++	return tb->symbols;
++}
++
++/**
++ * scols_table_enable_nolinesep:
++ * @tb: table
++ * @enable: 1 or 0
++ *
++ * Enable/disable line separator printing. This is useful if you want to
++ * re-printing the same line more than once (e.g. progress bar). Don't use it
++ * if you're not sure.
++ *
++ * Note that for the last line in the table the separator is disabled at all.
++ * The library differentiate between table terminator and line terminator
++ * (although for standard output \n byte is used in both cases).
++ *
++ * Returns: 0 on success, negative number in case of an error.
++ */
++int scols_table_enable_nolinesep(struct libscols_table *tb, int enable)
++{
++	if (!tb)
++		return -EINVAL;
+ 
++	DBG(TAB, ul_debugobj(tb, "nolinesep: %s", enable ? "ENABLE" : "DISABLE"));
++	tb->no_linesep = enable ? 1 : 0;
+ 	return 0;
+ }
++
++/**
++ * scols_table_is_nolinesep:
++ * @tb: a pointer to a struct libscols_table instance
++ *
++ * Returns: 1 if line separator printing is disabled.
++ *
++ * Since: 2.29
++ */
++int scols_table_is_nolinesep(const struct libscols_table *tb)
++{
++	return tb->no_linesep;
++}
++
+ /**
+  * scols_table_enable_colors:
+  * @tb: table
+@@ -698,7 +914,6 @@ int scols_table_set_symbols(struct libscols_table *tb,
+  */
+ int scols_table_enable_colors(struct libscols_table *tb, int enable)
+ {
+-	assert(tb);
+ 	if (!tb)
+ 		return -EINVAL;
+ 
+@@ -706,19 +921,19 @@ int scols_table_enable_colors(struct libscols_table *tb, int enable)
+ 	tb->colors_wanted = enable;
+ 	return 0;
+ }
++
+ /**
+  * scols_table_enable_raw:
+  * @tb: table
+  * @enable: 1 or 0
+  *
+  * Enable/disable raw output format. The parsable output formats
+- * (export and raw) are mutually exclusive.
++ * (export, raw, JSON, ...) are mutually exclusive.
+  *
+  * Returns: 0 on success, negative number in case of an error.
+  */
+ int scols_table_enable_raw(struct libscols_table *tb, int enable)
+ {
+-	assert(tb);
+ 	if (!tb)
+ 		return -EINVAL;
+ 
+@@ -730,6 +945,31 @@ int scols_table_enable_raw(struct libscols_table *tb, int enable)
+ 	return 0;
+ }
+ 
++/**
++ * scols_table_enable_json:
++ * @tb: table
++ * @enable: 1 or 0
++ *
++ * Enable/disable JSON output format. The parsable output formats
++ * (export, raw, JSON, ...) are mutually exclusive.
++ *
++ * Returns: 0 on success, negative number in case of an error.
++ *
++ * Since: 2.27
++ */
++int scols_table_enable_json(struct libscols_table *tb, int enable)
++{
++	if (!tb)
++		return -EINVAL;
++
++	DBG(TAB, ul_debugobj(tb, "json: %s", enable ? "ENABLE" : "DISABLE"));
++	if (enable)
++		tb->format = SCOLS_FMT_JSON;
++	else if (tb->format == SCOLS_FMT_JSON)
++		tb->format = 0;
++	return 0;
++}
++
+ /**
+  * scols_table_enable_export:
+  * @tb: table
+@@ -742,7 +982,6 @@ int scols_table_enable_raw(struct libscols_table *tb, int enable)
+  */
+ int scols_table_enable_export(struct libscols_table *tb, int enable)
+ {
+-	assert(tb);
+ 	if (!tb)
+ 		return -EINVAL;
+ 
+@@ -771,7 +1010,6 @@ int scols_table_enable_export(struct libscols_table *tb, int enable)
+  */
+ int scols_table_enable_ascii(struct libscols_table *tb, int enable)
+ {
+-	assert(tb);
+ 	if (!tb)
+ 		return -EINVAL;
+ 
+@@ -791,7 +1029,6 @@ int scols_table_enable_ascii(struct libscols_table *tb, int enable)
+  */
+ int scols_table_enable_noheadings(struct libscols_table *tb, int enable)
+ {
+-	assert(tb);
+ 	if (!tb)
+ 		return -EINVAL;
+ 	DBG(TAB, ul_debugobj(tb, "noheading: %s", enable ? "ENABLE" : "DISABLE"));
+@@ -799,6 +1036,28 @@ int scols_table_enable_noheadings(struct libscols_table *tb, int enable)
+ 	return 0;
+ }
+ 
++/**
++ * scols_table_enable_header_repeat:
++ * @tb: table
++ * @enable: 1 or 0
++ *
++ * Enable/disable header line repeat. The header line is printed only once by
++ * default.  Note that the flag will be silently ignored and disabled if the
++ * output is not on terminal or output format is JSON, raw, etc.
++ *
++ * Returns: 0 on success, negative number in case of an error.
++ *
++ * Since: 2.31
++ */
++int scols_table_enable_header_repeat(struct libscols_table *tb, int enable)
++{
++	if (!tb)
++		return -EINVAL;
++	DBG(TAB, ul_debugobj(tb, "header-repeat: %s", enable ? "ENABLE" : "DISABLE"));
++	tb->header_repeat = enable ? 1 : 0;
++	return 0;
++}
++
+ /**
+  * scols_table_enable_maxout:
+  * @tb: table
+@@ -811,7 +1070,6 @@ int scols_table_enable_noheadings(struct libscols_table *tb, int enable)
+  */
+ int scols_table_enable_maxout(struct libscols_table *tb, int enable)
+ {
+-	assert(tb);
+ 	if (!tb)
+ 		return -EINVAL;
+ 	DBG(TAB, ul_debugobj(tb, "maxout: %s", enable ? "ENABLE" : "DISABLE"));
+@@ -819,28 +1077,92 @@ int scols_table_enable_maxout(struct libscols_table *tb, int enable)
+ 	return 0;
+ }
+ 
++/**
++ * scols_table_enable_nowrap:
++ * @tb: table
++ * @enable: 1 or 0
++ *
++ * Never continue on next line, remove last column(s) when too large, truncate last column.
++ *
++ * Returns: 0 on success, negative number in case of an error.
++ *
++ * Since: 2.28
++ */
++int scols_table_enable_nowrap(struct libscols_table *tb, int enable)
++{
++	if (!tb)
++		return -EINVAL;
++	DBG(TAB, ul_debugobj(tb, "nowrap: %s", enable ? "ENABLE" : "DISABLE"));
++	tb->no_wrap = enable ? 1 : 0;
++	return 0;
++}
++
++/**
++ * scols_table_is_nowrap:
++ * @tb: a pointer to a struct libscols_table instance
++ *
++ * Returns: 1 if nowrap is enabled.
++ *
++ * Since: 2.29
++ */
++int scols_table_is_nowrap(const struct libscols_table *tb)
++{
++	return tb->no_wrap;
++}
++
++/**
++ * scols_table_enable_noencoding:
++ * @tb: table
++ * @enable: 1 or 0
++ *
++ * The library encode non-printable and control chars by \xHEX by default.
++ *
++ * Returns: 0 on success, negative number in case of an error.
++ *
++ * Since: 2.31
++ */
++int scols_table_enable_noencoding(struct libscols_table *tb, int enable)
++{
++	if (!tb)
++		return -EINVAL;
++	DBG(TAB, ul_debugobj(tb, "encoding: %s", enable ? "ENABLE" : "DISABLE"));
++	tb->no_encode = enable ? 1 : 0;
++	return 0;
++}
++
++/**
++ * scols_table_is_noencoding:
++ * @tb: a pointer to a struct libscols_table instance
++ *
++ * Returns: 1 if encoding is disabled.
++ *
++ * Since: 2.31
++ */
++int scols_table_is_noencoding(const struct libscols_table *tb)
++{
++	return tb->no_encode;
++}
++
+ /**
+  * scols_table_colors_wanted:
+  * @tb: table
+  *
+  * Returns: 1 if colors are enabled.
+  */
+-int scols_table_colors_wanted(struct libscols_table *tb)
++int scols_table_colors_wanted(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb && tb->colors_wanted;
++	return tb->colors_wanted;
+ }
+ 
+ /**
+  * scols_table_is_empty:
+  * @tb: table
+  *
+- * Returns: 1  if the table is empty.
++ * Returns: 1 if the table is empty.
+  */
+-int scols_table_is_empty(struct libscols_table *tb)
++int scols_table_is_empty(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return !tb || !tb->nlines;
++	return !tb->nlines;
+ }
+ 
+ /**
+@@ -849,10 +1171,9 @@ int scols_table_is_empty(struct libscols_table *tb)
+  *
+  * Returns: 1 if ASCII tree is enabled.
+  */
+-int scols_table_is_ascii(struct libscols_table *tb)
++int scols_table_is_ascii(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb && tb->ascii;
++	return tb->ascii;
+ }
+ 
+ /**
+@@ -861,10 +1182,22 @@ int scols_table_is_ascii(struct libscols_table *tb)
+  *
+  * Returns: 1 if header output is disabled.
+  */
+-int scols_table_is_noheadings(struct libscols_table *tb)
++int scols_table_is_noheadings(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb && tb->no_headings;
++	return tb->no_headings;
++}
++
++/**
++ * scols_table_is_header_repeat
++ * @tb: table
++ *
++ * Returns: 1 if header repeat is enabled.
++ *
++ * Since: 2.31
++ */
++int scols_table_is_header_repeat(const struct libscols_table *tb)
++{
++	return tb->header_repeat;
+ }
+ 
+ /**
+@@ -873,10 +1206,9 @@ int scols_table_is_noheadings(struct libscols_table *tb)
+  *
+  * Returns: 1 if export output format is enabled.
+  */
+-int scols_table_is_export(struct libscols_table *tb)
++int scols_table_is_export(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb && tb->format == SCOLS_FMT_EXPORT;
++	return tb->format == SCOLS_FMT_EXPORT;
+ }
+ 
+ /**
+@@ -885,23 +1217,33 @@ int scols_table_is_export(struct libscols_table *tb)
+  *
+  * Returns: 1 if raw output format is enabled.
+  */
+-int scols_table_is_raw(struct libscols_table *tb)
++int scols_table_is_raw(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb && tb->format == SCOLS_FMT_RAW;
++	return tb->format == SCOLS_FMT_RAW;
+ }
+ 
++/**
++ * scols_table_is_json:
++ * @tb: table
++ *
++ * Returns: 1 if JSON output format is enabled.
++ *
++ * Since: 2.27
++ */
++int scols_table_is_json(const struct libscols_table *tb)
++{
++	return tb->format == SCOLS_FMT_JSON;
++}
+ 
+ /**
+  * scols_table_is_maxout
+  * @tb: table
+  *
+- * Returns: 1 if output maximization is enabled, negative value in case of an error.
++ * Returns: 1 if output maximization is enabled or 0
+  */
+-int scols_table_is_maxout(struct libscols_table *tb)
++int scols_table_is_maxout(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb && tb->maxout;
++	return tb->maxout;
+ }
+ 
+ /**
+@@ -910,10 +1252,9 @@ int scols_table_is_maxout(struct libscols_table *tb)
+  *
+  * Returns: returns 1 tree-like output is expected.
+  */
+-int scols_table_is_tree(struct libscols_table *tb)
++int scols_table_is_tree(const struct libscols_table *tb)
+ {
+-	assert(tb);
+-	return tb && tb->ntreecols > 0;
++	return tb->ntreecols > 0;
+ }
+ 
+ /**
+@@ -922,29 +1263,12 @@ int scols_table_is_tree(struct libscols_table *tb)
+  * @sep: separator
+  *
+  * Sets the column separator of @tb to @sep.
+- * Please note that @sep should always take up a single cell in the output.
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+ int scols_table_set_column_separator(struct libscols_table *tb, const char *sep)
+ {
+-	char *p = NULL;
+-
+-	assert (tb);
+-
+-	if (!tb)
+-		return -EINVAL;
+-
+-	if (sep) {
+-		p = strdup(sep);
+-		if (!p)
+-			return -ENOMEM;
+-	}
+-
+-	DBG(TAB, ul_debugobj(tb, "new columns separator: %s", sep));
+-	free(tb->colsep);
+-	tb->colsep = p;
+-	return 0;
++	return strdup_to_struct_member(tb, colsep, sep);
+ }
+ 
+ /**
+@@ -958,23 +1282,7 @@ int scols_table_set_column_separator(struct libscols_table *tb, const char *sep)
+  */
+ int scols_table_set_line_separator(struct libscols_table *tb, const char *sep)
+ {
+-	char *p = NULL;
+-
+-	assert (tb);
+-
+-	if (!tb)
+-		return -EINVAL;
+-
+-	if (sep) {
+-		p = strdup(sep);
+-		if (!p)
+-			return -ENOMEM;
+-	}
+-
+-	DBG(TAB, ul_debugobj(tb, "new lines separator: %s", sep));
+-	free(tb->linesep);
+-	tb->linesep = p;
+-	return 0;
++	return strdup_to_struct_member(tb, linesep, sep);
+ }
+ 
+ /**
+@@ -983,12 +1291,8 @@ int scols_table_set_line_separator(struct libscols_table *tb, const char *sep)
+  *
+  * Returns: @tb column separator, NULL in case of an error
+  */
+-char *scols_table_get_column_separator(struct libscols_table *tb)
++const char *scols_table_get_column_separator(const struct libscols_table *tb)
+ {
+-	assert (tb);
+-
+-	if (!tb)
+-		return NULL;
+ 	return tb->colsep;
+ }
+ 
+@@ -998,17 +1302,12 @@ char *scols_table_get_column_separator(struct libscols_table *tb)
+  *
+  * Returns: @tb line separator, NULL in case of an error
+  */
+-char *scols_table_get_line_separator(struct libscols_table *tb)
++const char *scols_table_get_line_separator(const struct libscols_table *tb)
+ {
+-	assert (tb);
+-
+-	if (!tb)
+-		return NULL;
+ 	return tb->linesep;
+-
+ }
+-
+-static int cells_cmp_wrapper(struct list_head *a, struct list_head *b, void *data)
++/* for lines in the struct libscols_line->ln_lines list */
++static int cells_cmp_wrapper_lines(struct list_head *a, struct list_head *b, void *data)
+ {
+ 	struct libscols_column *cl = (struct libscols_column *) data;
+ 	struct libscols_line *ra, *rb;
+@@ -1026,24 +1325,218 @@ static int cells_cmp_wrapper(struct list_head *a, struct list_head *b, void *dat
+ 	return cl->cmpfunc(ca, cb, cl->cmpfunc_data);
+ }
+ 
++/* for lines in the struct libscols_line->ln_children list */
++static int cells_cmp_wrapper_children(struct list_head *a, struct list_head *b, void *data)
++{
++	struct libscols_column *cl = (struct libscols_column *) data;
++	struct libscols_line *ra, *rb;
++	struct libscols_cell *ca, *cb;
++
++	assert(a);
++	assert(b);
++	assert(cl);
++
++	ra = list_entry(a, struct libscols_line, ln_children);
++	rb = list_entry(b, struct libscols_line, ln_children);
++	ca = scols_line_get_cell(ra, cl->seqnum);
++	cb = scols_line_get_cell(rb, cl->seqnum);
++
++	return cl->cmpfunc(ca, cb, cl->cmpfunc_data);
++}
++
++
++static int sort_line_children(struct libscols_line *ln, struct libscols_column *cl)
++{
++	struct list_head *p;
++
++	if (list_empty(&ln->ln_branch))
++		return 0;
++
++	list_for_each(p, &ln->ln_branch) {
++		struct libscols_line *chld =
++				list_entry(p, struct libscols_line, ln_children);
++		sort_line_children(chld, cl);
++	}
++
++	list_sort(&ln->ln_branch, cells_cmp_wrapper_children, cl);
++	return 0;
++}
++
+ /**
+  * scols_sort_table:
+  * @tb: table
+  * @cl: order by this column
+  *
+- * Orders the table by the column. See also scols_column_set_cmpfunc().
++ * Orders the table by the column. See also scols_column_set_cmpfunc(). If the
++ * tree output is enabled then children in the tree are recursively sorted too.
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
+ int scols_sort_table(struct libscols_table *tb, struct libscols_column *cl)
+ {
+-	assert(tb);
+-	assert(cl);
+-
+-	if (!tb || !cl)
++	if (!tb || !cl || !cl->cmpfunc)
+ 		return -EINVAL;
+ 
+ 	DBG(TAB, ul_debugobj(tb, "sorting table"));
+-	list_sort(&tb->tb_lines, cells_cmp_wrapper, cl);
++	list_sort(&tb->tb_lines, cells_cmp_wrapper_lines, cl);
++
++	if (scols_table_is_tree(tb)) {
++		struct libscols_line *ln;
++		struct libscols_iter itr;
++
++		scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++		while (scols_table_next_line(tb, &itr, &ln) == 0)
++			sort_line_children(ln, cl);
++	}
++
++	return 0;
++}
++
++static struct libscols_line *move_line_and_children(struct libscols_line *ln, struct libscols_line *pre)
++{
++	if (pre) {
++		list_del_init(&ln->ln_lines);			/* remove from old position */
++	        list_add(&ln->ln_lines, &pre->ln_lines);        /* add to the new place (behind @pre) */
++	}
++	pre = ln;
++
++	if (!list_empty(&ln->ln_branch)) {
++		struct list_head *p;
++
++		list_for_each(p, &ln->ln_branch) {
++			struct libscols_line *chld =
++					list_entry(p, struct libscols_line, ln_children);
++			pre = move_line_and_children(chld, pre);
++		}
++	}
++
++	return pre;
++}
++
++/**
++ * scols_sort_table_by_tree:
++ * @tb: table
++ *
++ * Reorders lines in the table by parent->child relation. Note that order of
++ * the lines in the table is independent on the tree hierarchy.
++ *
++ * Since: 2.30
++ *
++ * Returns: 0, a negative value in case of an error.
++ */
++int scols_sort_table_by_tree(struct libscols_table *tb)
++{
++	struct libscols_line *ln;
++	struct libscols_iter itr;
++
++	if (!tb)
++		return -EINVAL;
++
++	DBG(TAB, ul_debugobj(tb, "sorting table by tree"));
++
++	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++	while (scols_table_next_line(tb, &itr, &ln) == 0) {
++		if (ln->parent)
++			continue;
++
++		move_line_and_children(ln, NULL);
++	}
++
++	return 0;
++}
++
++
++/**
++ * scols_table_set_termforce:
++ * @tb: table
++ * @force: SCOLS_TERMFORCE_{NEVER,ALWAYS,AUTO}
++ *
++ * Forces library to use stdout as terminal, non-terminal or use automatic
++ * detection (default).
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.29
++ */
++int scols_table_set_termforce(struct libscols_table *tb, int force)
++{
++	if (!tb)
++		return -EINVAL;
++	tb->termforce = force;
++	return 0;
++}
++
++/**
++ * scols_table_get_termforce:
++ * @tb: table
++ *
++ * Returns: SCOLS_TERMFORCE_{NEVER,ALWAYS,AUTO} or a negative value in case of an error.
++ *
++ * Since: 2.29
++ */
++int scols_table_get_termforce(const struct libscols_table *tb)
++{
++	return tb->termforce;
++}
++
++/**
++ * scols_table_set_termwidth
++ * @tb: table
++ * @width: terminal width
++ *
++ * The library automatically detects terminal width or defaults to 80 chars if
++ * detections is unsuccessful. This function override this behaviour.
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.29
++ */
++int scols_table_set_termwidth(struct libscols_table *tb, size_t width)
++{
++	DBG(TAB, ul_debugobj(tb, "set terminatl width: %zu", width));
++	tb->termwidth = width;
+ 	return 0;
+ }
++
++/**
++ * scols_table_get_termwidth
++ * @tb: table
++ *
++ * Returns: terminal width.
++ */
++size_t scols_table_get_termwidth(const struct libscols_table *tb)
++{
++	return tb->termwidth;
++}
++
++/**
++ * scols_table_set_termheight
++ * @tb: table
++ * @height: terminal height (number of lines)
++ *
++ * The library automatically detects terminal height or defaults to 24 lines if
++ * detections is unsuccessful. This function override this behaviour.
++ *
++ * Returns: 0, a negative value in case of an error.
++ *
++ * Since: 2.31
++ */
++int scols_table_set_termheight(struct libscols_table *tb, size_t height)
++{
++	DBG(TAB, ul_debugobj(tb, "set terminatl height: %zu", height));
++	tb->termheight = height;
++	return 0;
++}
++
++/**
++ * scols_table_get_termheight
++ * @tb: table
++ *
++ * Returns: terminal height (number of lines).
++ *
++ * Since: 2.31
++ */
++size_t scols_table_get_termheight(const struct libscols_table *tb)
++{
++	return tb->termheight;
++}
+diff --git a/libsmartcols/src/table_print.c b/libsmartcols/src/table_print.c
+index c9f3d8f4b..10126fd79 100644
+--- a/libsmartcols/src/table_print.c
++++ b/libsmartcols/src/table_print.c
+@@ -2,6 +2,7 @@
+  * table.c - functions handling the data at the table level
+  *
+  * Copyright (C) 2010-2014 Karel Zak <kzak@redhat.com>
++ * Copyright (C) 2016 Igor Gnatenko <i.gnatenko.brain@gmail.com>
+  *
+  * This file may be redistributed under the terms of the
+  * GNU Lesser General Public License.
+@@ -10,7 +11,7 @@
+ /**
+  * SECTION: table_print
+  * @title: Table print
+- * @short_description: table print API
++ * @short_description: output functions
+  *
+  * Table output API.
+  */
+@@ -21,13 +22,30 @@
+ #include <termios.h>
+ #include <ctype.h>
+ 
+-#include "nls.h"
+ #include "mbsalign.h"
+-#include "widechar.h"
+-#include "ttyutils.h"
+ #include "carefulputc.h"
+ #include "smartcolsP.h"
+ 
++#define colsep(tb)	((tb)->colsep ? (tb)->colsep : " ")
++#define linesep(tb)	((tb)->linesep ? (tb)->linesep : "\n")
++
++/* Fallback for symbols
++ *
++ * Note that by default library define all the symbols, but in case user does
++ * not define all symbols or if we extended the symbols struct then we need
++ * fallback to be more robust and backwardly compatible.
++ */
++#define titlepadding_symbol(tb)	((tb)->symbols->title_padding ? (tb)->symbols->title_padding : " ")
++#define branch_symbol(tb)	((tb)->symbols->branch ? (tb)->symbols->branch : "|-")
++#define vertical_symbol(tb)	((tb)->symbols->vert ? (tb)->symbols->vert : "| ")
++#define right_symbol(tb)	((tb)->symbols->right ? (tb)->symbols->right : "`-")
++
++#define cellpadding_symbol(tb)  ((tb)->padding_debug ? "." : \
++				 ((tb)->symbols->cell_padding ? (tb)->symbols->cell_padding: " "))
++
++#define want_repeat_header(tb)	(!(tb)->header_repeat || (tb)->header_next <= (tb)->termlines_used)
++
++
+ /* This is private struct to work with output data */
+ struct libscols_buffer {
+ 	char	*begin;		/* begin of the buffer */
+@@ -88,7 +106,6 @@ static int buffer_append_data(struct libscols_buffer *buf, const char *str)
+ 
+ 	if (maxsz <= sz)
+ 		return -EINVAL;
+-
+ 	memcpy(buf->cur, str, sz + 1);
+ 	buf->cur += sz;
+ 	return 0;
+@@ -100,7 +117,7 @@ static int buffer_set_data(struct libscols_buffer *buf, const char *str)
+ 	return rc ? rc : buffer_append_data(buf, str);
+ }
+ 
+-/* save the current buffer possition to art_idx */
++/* save the current buffer position to art_idx */
+ static void buffer_set_art_index(struct libscols_buffer *buf)
+ {
+ 	if (buf) {
+@@ -115,7 +132,10 @@ static char *buffer_get_data(struct libscols_buffer *buf)
+ }
+ 
+ /* encode data by mbs_safe_encode() to avoid control and non-printable chars */
+-static char *buffer_get_safe_data(struct libscols_buffer *buf, size_t *cells)
++static char *buffer_get_safe_data(struct libscols_table *tb,
++				  struct libscols_buffer *buf,
++				  size_t *cells,
++				  const char *safechars)
+ {
+ 	char *data = buffer_get_data(buf);
+ 	char *res = NULL;
+@@ -129,7 +149,14 @@ static char *buffer_get_safe_data(struct libscols_buffer *buf, size_t *cells)
+ 			goto nothing;
+ 	}
+ 
+-	res = mbs_safe_encode_to_buffer(data, cells, buf->encdata);
++	if (tb->no_encode) {
++		*cells = mbs_safe_width(data);
++		strcpy(buf->encdata, data);
++		res = buf->encdata;
++	} else {
++		res = mbs_safe_encode_to_buffer(data, cells, buf->encdata, safechars);
++	}
++
+ 	if (!res || !*cells || *cells == (size_t) -1)
+ 		goto nothing;
+ 	return res;
+@@ -151,11 +178,257 @@ static size_t buffer_get_safe_art_size(struct libscols_buffer *buf)
+ 	return bytes;
+ }
+ 
+-#define is_last_column(_tb, _cl) \
+-		list_entry_is_last(&(_cl)->cl_columns, &(_tb)->tb_columns)
++/* returns pointer to the end of used data */
++static int line_ascii_art_to_buffer(struct libscols_table *tb,
++				    struct libscols_line *ln,
++				    struct libscols_buffer *buf)
++{
++	const char *art;
++	int rc;
++
++	assert(ln);
++	assert(buf);
+ 
+-#define colsep(tb) ((tb)->colsep ? (tb)->colsep : " ")
+-#define linesep(tb) ((tb)->linesep ? (tb)->linesep : "\n")
++	if (!ln->parent)
++		return 0;
++
++	rc = line_ascii_art_to_buffer(tb, ln->parent, buf);
++	if (rc)
++		return rc;
++
++	if (list_entry_is_last(&ln->ln_children, &ln->parent->ln_branch))
++		art = "  ";
++	else
++		art = vertical_symbol(tb);
++
++	return buffer_append_data(buf, art);
++}
++
++static int is_last_column(struct libscols_column *cl)
++{
++	int rc = list_entry_is_last(&cl->cl_columns, &cl->table->tb_columns);
++	struct libscols_column *next;
++
++	if (rc)
++		return 1;
++
++	next = list_entry(cl->cl_columns.next, struct libscols_column, cl_columns);
++	if (next && scols_column_is_hidden(next) && is_last_column(next))
++		return 1;
++	return 0;
++}
++
++
++static int has_pending_data(struct libscols_table *tb)
++{
++	struct libscols_column *cl;
++	struct libscols_iter itr;
++
++	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++	while (scols_table_next_column(tb, &itr, &cl) == 0) {
++		if (scols_column_is_hidden(cl))
++			continue;
++		if (cl->pending_data)
++			return 1;
++	}
++	return 0;
++}
++
++/* print padding or ASCII-art instead of data of @cl */
++static void print_empty_cell(struct libscols_table *tb,
++			  struct libscols_column *cl,
++			  struct libscols_line *ln,	/* optional */
++			  size_t bufsz)
++{
++	size_t len_pad = 0;		/* in screen cells as opposed to bytes */
++
++	/* generate tree ASCII-art rather than padding */
++	if (ln && scols_column_is_tree(cl)) {
++		if (!ln->parent) {
++			/* only print symbols->vert if followed by child */
++			if (!list_empty(&ln->ln_branch)) {
++				fputs(vertical_symbol(tb), tb->out);
++				len_pad = mbs_safe_width(vertical_symbol(tb));
++			}
++		} else {
++			/* use the same draw function as though we were intending to draw an L-shape */
++			struct libscols_buffer *art = new_buffer(bufsz);
++			char *data;
++
++			if (art) {
++				/* whatever the rc, len_pad will be sensible */
++				line_ascii_art_to_buffer(tb, ln, art);
++				if (!list_empty(&ln->ln_branch) && has_pending_data(tb))
++					buffer_append_data(art, vertical_symbol(tb));
++				data = buffer_get_safe_data(tb, art, &len_pad, NULL);
++				if (data && len_pad)
++					fputs(data, tb->out);
++				free_buffer(art);
++			}
++		}
++	}
++
++	if (is_last_column(cl))
++		return;
++
++	/* fill rest of cell with space */
++	for(; len_pad < cl->width; ++len_pad)
++		fputs(cellpadding_symbol(tb), tb->out);
++
++	fputs(colsep(tb), tb->out);
++}
++
++
++static const char *get_cell_color(struct libscols_table *tb,
++				  struct libscols_column *cl,
++				  struct libscols_line *ln,	/* optional */
++				  struct libscols_cell *ce)	/* optional */
++{
++	const char *color = NULL;
++
++	if (tb && tb->colors_wanted) {
++		if (ce)
++			color = ce->color;
++		if (ln && !color)
++			color = ln->color;
++		if (!color)
++			color = cl->color;
++	}
++	return color;
++}
++
++/* Fill the start of a line with padding (or with tree ascii-art).
++ *
++ * This is necessary after a long non-truncated column, as this requires the
++ * next column to be printed on the next line. For example (see 'DDD'):
++ *
++ * aaa bbb ccc ddd eee
++ * AAA BBB CCCCCCC
++ *             DDD EEE
++ * ^^^^^^^^^^^^
++ *  new line padding
++ */
++static void print_newline_padding(struct libscols_table *tb,
++				  struct libscols_column *cl,
++				  struct libscols_line *ln,	/* optional */
++				  size_t bufsz)
++{
++	size_t i;
++
++	assert(tb);
++	assert(cl);
++
++	fputs(linesep(tb), tb->out);		/* line break */
++	tb->termlines_used++;
++
++	/* fill cells after line break */
++	for (i = 0; i <= (size_t) cl->seqnum; i++)
++		print_empty_cell(tb, scols_table_get_column(tb, i), ln, bufsz);
++}
++
++/*
++ * Pending data
++ *
++ * The first line in the multi-line cells (columns with SCOLS_FL_WRAP flag) is
++ * printed as usually and output is truncated to match column width.
++ *
++ * The rest of the long text is printed on next extra line(s). The extra lines
++ * don't exist in the table (not represented by libscols_line). The data for
++ * the extra lines are stored in libscols_column->pending_data_buf and the
++ * function print_line() adds extra lines until the buffer is not empty in all
++ * columns.
++ */
++
++/* set data that will be printed by extra lines */
++static int set_pending_data(struct libscols_column *cl, const char *data, size_t sz)
++{
++	char *p = NULL;
++
++	if (data && *data) {
++		DBG(COL, ul_debugobj(cl, "setting pending data"));
++		assert(sz);
++		p = strdup(data);
++		if (!p)
++			return -ENOMEM;
++	}
++
++	free(cl->pending_data_buf);
++	cl->pending_data_buf = p;
++	cl->pending_data_sz = sz;
++	cl->pending_data = cl->pending_data_buf;
++	return 0;
++}
++
++/* the next extra line has been printed, move pending data cursor */
++static int step_pending_data(struct libscols_column *cl, size_t bytes)
++{
++	DBG(COL, ul_debugobj(cl, "step pending data %zu -= %zu", cl->pending_data_sz, bytes));
++
++	if (bytes >= cl->pending_data_sz)
++		return set_pending_data(cl, NULL, 0);
++
++	cl->pending_data += bytes;
++	cl->pending_data_sz -= bytes;
++	return 0;
++}
++
++/* print next pending data for the column @cl */
++static int print_pending_data(
++		struct libscols_table *tb,
++		struct libscols_column *cl,
++		struct libscols_line *ln,	/* optional */
++		struct libscols_cell *ce)
++{
++	const char *color = get_cell_color(tb, cl, ln, ce);
++	size_t width = cl->width, bytes;
++	size_t len = width, i;
++	char *data;
++	char *nextchunk = NULL;
++
++	if (!cl->pending_data)
++		return 0;
++	if (!width)
++		return -EINVAL;
++
++	DBG(COL, ul_debugobj(cl, "printing pending data"));
++
++	data = strdup(cl->pending_data);
++	if (!data)
++		goto err;
++
++	if (scols_column_is_customwrap(cl)
++	    && (nextchunk = cl->wrap_nextchunk(cl, data, cl->wrapfunc_data))) {
++		bytes = nextchunk - data;
++
++		len = mbs_safe_nwidth(data, bytes, NULL);
++	} else
++		bytes = mbs_truncate(data, &len);
++
++	if (bytes == (size_t) -1)
++		goto err;
++
++	if (bytes)
++		step_pending_data(cl, bytes);
++
++	if (color)
++		fputs(color, tb->out);
++	fputs(data, tb->out);
++	if (color)
++		fputs(UL_COLOR_RESET, tb->out);
++	free(data);
++
++	if (is_last_column(cl))
++		return 0;
++
++	for (i = len; i < width; i++)
++		fputs(cellpadding_symbol(tb), tb->out);		/* padding */
++
++	fputs(colsep(tb), tb->out);	/* columns separator */
++	return 0;
++err:
++	free(data);
++	return -errno;
++}
+ 
+ static int print_data(struct libscols_table *tb,
+ 		      struct libscols_column *cl,
+@@ -165,76 +438,120 @@ static int print_data(struct libscols_table *tb,
+ {
+ 	size_t len = 0, i, width, bytes;
+ 	const char *color = NULL;
+-	char *data;
++	char *data, *nextchunk;
++	int is_last;
+ 
+ 	assert(tb);
+ 	assert(cl);
+ 
+-	DBG(TAB, ul_debugobj(tb,
+-			" -> data, column=%p, line=%p, cell=%p, buff=%p",
+-			cl, ln, ce, buf));
+-
+ 	data = buffer_get_data(buf);
+ 	if (!data)
+ 		data = "";
+ 
+-	/* raw mode */
+-	if (scols_table_is_raw(tb)) {
++	is_last = is_last_column(cl);
++
++	switch (tb->format) {
++	case SCOLS_FMT_RAW:
+ 		fputs_nonblank(data, tb->out);
+-		if (!is_last_column(tb, cl))
++		if (!is_last)
+ 			fputs(colsep(tb), tb->out);
+ 		return 0;
+-	}
+ 
+-	/* NAME=value mode */
+-	if (scols_table_is_export(tb)) {
++	case SCOLS_FMT_EXPORT:
+ 		fprintf(tb->out, "%s=", scols_cell_get_data(&cl->header));
+ 		fputs_quoted(data, tb->out);
+-		if (!is_last_column(tb, cl))
++		if (!is_last)
+ 			fputs(colsep(tb), tb->out);
+ 		return 0;
+-	}
+ 
+-	if (tb->colors_wanted) {
+-		if (ce && !color)
+-			color = ce->color;
+-		if (ln && !color)
+-			color = ln->color;
+-		if (!color)
+-			color = cl->color;
++	case SCOLS_FMT_JSON:
++		fputs_quoted_json_lower(scols_cell_get_data(&cl->header), tb->out);
++		fputs(":", tb->out);
++		switch (cl->json_type) {
++			case SCOLS_JSON_STRING:
++				if (!*data)
++					fputs("null", tb->out);
++				else
++					fputs_quoted_json(data, tb->out);
++				break;
++			case SCOLS_JSON_NUMBER:
++				if (!*data)
++					fputs("null", tb->out);
++				else
++					fputs(data, tb->out);
++				break;
++			case SCOLS_JSON_BOOLEAN:
++				fputs(!*data ? "false" :
++				      *data == '0' ? "false" :
++				      *data == 'N' || *data == 'n' ? "false" : "true",
++				      tb->out);
++				break;
++		}
++		if (!is_last)
++			fputs(", ", tb->out);
++		return 0;
++
++	case SCOLS_FMT_HUMAN:
++		break;		/* continue below */
+ 	}
+ 
+-	/* encode, note that 'len' and 'width' are number of cells, not bytes */
+-	data = buffer_get_safe_data(buf, &len);
++	color = get_cell_color(tb, cl, ln, ce);
++
++	/* Encode. Note that 'len' and 'width' are number of cells, not bytes.
++	 */
++	data = buffer_get_safe_data(tb, buf, &len, scols_column_get_safechars(cl));
+ 	if (!data)
+ 		data = "";
+-	width = cl->width;
+ 	bytes = strlen(data);
++	width = cl->width;
++
++	/* custom multi-line cell based */
++	if (*data && scols_column_is_customwrap(cl)
++	    && (nextchunk = cl->wrap_nextchunk(cl, data, cl->wrapfunc_data))) {
++		set_pending_data(cl, nextchunk, bytes - (nextchunk - data));
++		bytes = nextchunk - data;
++		len = mbs_safe_nwidth(data, bytes, NULL);
++	}
+ 
+-	if (is_last_column(tb, cl) && len < width && !scols_table_is_maxout(tb))
++	if (is_last
++	    && len < width
++	    && !scols_table_is_maxout(tb)
++	    && !scols_column_is_right(cl))
+ 		width = len;
+ 
+ 	/* truncate data */
+ 	if (len > width && scols_column_is_trunc(cl)) {
+ 		len = width;
+ 		bytes = mbs_truncate(data, &len);	/* updates 'len' */
++	}
+ 
+-		if (!data || bytes == (size_t) -1) {
+-			bytes = len = 0;
+-			data = NULL;
+-		}
++	/* standard multi-line cell */
++	if (len > width && scols_column_is_wrap(cl)
++	    && !scols_column_is_customwrap(cl)) {
++		set_pending_data(cl, data, bytes);
++
++		len = width;
++		bytes = mbs_truncate(data, &len);
++		if (bytes  != (size_t) -1 && bytes > 0)
++			step_pending_data(cl, bytes);
++	}
++
++	if (bytes == (size_t) -1) {
++		bytes = len = 0;
++		data = NULL;
+ 	}
+ 
+ 	if (data) {
+ 		if (scols_column_is_right(cl)) {
+-			size_t xw = cl->width;
+ 			if (color)
+ 				fputs(color, tb->out);
+-			fprintf(tb->out, "%*s", (int) xw, data);
++			for (i = len; i < width; i++)
++				fputs(cellpadding_symbol(tb), tb->out);
++			fputs(data, tb->out);
+ 			if (color)
+ 				fputs(UL_COLOR_RESET, tb->out);
+-			if (len < xw)
+-				len = xw;
++			len = width;
++
+ 		} else if (color) {
+ 			char *p = data;
+ 			size_t art = buffer_get_safe_art_size(buf);
+@@ -252,46 +569,17 @@ static int print_data(struct libscols_table *tb,
+ 			fputs(data, tb->out);
+ 	}
+ 	for (i = len; i < width; i++)
+-		fputs(" ", tb->out);		/* padding */
+-
+-	if (!is_last_column(tb, cl)) {
+-		if (len > width && !scols_column_is_trunc(cl)) {
+-			fputs(linesep(tb), tb->out);
+-			for (i = 0; i <= (size_t) cl->seqnum; i++) {
+-				struct libscols_column *x = scols_table_get_column(tb, i);
+-				fprintf(tb->out, "%*s ", -((int)x->width), " ");
+-			}
+-		} else
+-			fputs(colsep(tb), tb->out);	/* columns separator */
+-	}
+-
+-	return 0;
+-}
+-
+-/* returns pointer to the end of used data */
+-static int line_ascii_art_to_buffer(struct libscols_table *tb,
+-				    struct libscols_line *ln,
+-				    struct libscols_buffer *buf)
+-{
+-	const char *art;
+-	int rc;
++		fputs(cellpadding_symbol(tb), tb->out);	/* padding */
+ 
+-	assert(ln);
+-	assert(buf);
+-
+-	if (!ln->parent)
++	if (is_last)
+ 		return 0;
+ 
+-	rc = line_ascii_art_to_buffer(tb, ln->parent, buf);
+-	if (rc)
+-		return rc;
+-
+-	if (list_entry_is_last(&ln->ln_children, &ln->parent->ln_branch))
+-		art = "  ";
++	if (len > width && !scols_column_is_trunc(cl))
++		print_newline_padding(tb, cl, ln, buf->bufsz);	/* next column starts on next line */
+ 	else
+-		art = tb->symbols->vert;
++		fputs(colsep(tb), tb->out);		/* columns separator */
+ 
+-	return buffer_append_data(buf, art);
++	return 0;
+ }
+ 
+ static int cell_to_buffer(struct libscols_table *tb,
+@@ -322,13 +610,13 @@ static int cell_to_buffer(struct libscols_table *tb,
+ 	/*
+ 	 * Tree stuff
+ 	 */
+-	if (ln->parent) {
++	if (ln->parent && !scols_table_is_json(tb)) {
+ 		rc = line_ascii_art_to_buffer(tb, ln->parent, buf);
+ 
+ 		if (!rc && list_entry_is_last(&ln->ln_children, &ln->parent->ln_branch))
+-			rc = buffer_append_data(buf, tb->symbols->right);
++			rc = buffer_append_data(buf, right_symbol(tb));
+ 		else if (!rc)
+-			rc = buffer_append_data(buf, tb->symbols->branch);
++			rc = buffer_append_data(buf, branch_symbol(tb));
+ 		if (!rc)
+ 			buffer_set_art_index(buf);
+ 	}
+@@ -338,34 +626,252 @@ static int cell_to_buffer(struct libscols_table *tb,
+ 	return rc;
+ }
+ 
++static void fput_indent(struct libscols_table *tb)
++{
++	int i;
++
++	for (i = 0; i <= tb->indent; i++)
++		fputs("   ", tb->out);
++}
++
++static void fput_table_open(struct libscols_table *tb)
++{
++	tb->indent = 0;
++
++	if (scols_table_is_json(tb)) {
++		fputc('{', tb->out);
++		fputs(linesep(tb), tb->out);
++
++		fput_indent(tb);
++		fputs_quoted(tb->name, tb->out);
++		fputs(": [", tb->out);
++		fputs(linesep(tb), tb->out);
++
++		tb->indent++;
++		tb->indent_last_sep = 1;
++	}
++}
++
++static void fput_table_close(struct libscols_table *tb)
++{
++	tb->indent--;
++
++	if (scols_table_is_json(tb)) {
++		fput_indent(tb);
++		fputc(']', tb->out);
++		tb->indent--;
++		fputs(linesep(tb), tb->out);
++		fputc('}', tb->out);
++		tb->indent_last_sep = 1;
++	}
++}
++
++static void fput_children_open(struct libscols_table *tb)
++{
++	if (scols_table_is_json(tb)) {
++		fputc(',', tb->out);
++		fputs(linesep(tb), tb->out);
++		fput_indent(tb);
++		fputs("\"children\": [", tb->out);
++	}
++	/* between parent and child is separator */
++	fputs(linesep(tb), tb->out);
++	tb->indent_last_sep = 1;
++	tb->indent++;
++	tb->termlines_used++;
++}
++
++static void fput_children_close(struct libscols_table *tb)
++{
++	tb->indent--;
++
++	if (scols_table_is_json(tb)) {
++		fput_indent(tb);
++		fputc(']', tb->out);
++		fputs(linesep(tb), tb->out);
++		tb->indent_last_sep = 1;
++	}
++}
++
++static void fput_line_open(struct libscols_table *tb)
++{
++	if (scols_table_is_json(tb)) {
++		fput_indent(tb);
++		fputc('{', tb->out);
++		tb->indent_last_sep = 0;
++	}
++	tb->indent++;
++}
++
++static void fput_line_close(struct libscols_table *tb, int last, int last_in_table)
++{
++	tb->indent--;
++	if (scols_table_is_json(tb)) {
++		if (tb->indent_last_sep)
++			fput_indent(tb);
++		fputs(last ? "}" : "},", tb->out);
++		if (!tb->no_linesep)
++			fputs(linesep(tb), tb->out);
++
++	} else if (tb->no_linesep == 0 && last_in_table == 0) {
++		fputs(linesep(tb), tb->out);
++		tb->termlines_used++;
++	}
++
++	tb->indent_last_sep = 1;
++}
++
+ /*
+- * Prints data, data maybe be printed in more formats (raw, NAME=xxx pairs) and
+- * control and non-printable chars maybe encoded in \x?? hex encoding.
++ * Prints data. Data can be printed in more formats (raw, NAME=xxx pairs), and
++ * control and non-printable characters can be encoded in the \x?? encoding.
+  */
+ static int print_line(struct libscols_table *tb,
+ 		      struct libscols_line *ln,
+ 		      struct libscols_buffer *buf)
+ {
+-	int rc = 0;
++	int rc = 0, pending = 0;
+ 	struct libscols_column *cl;
+ 	struct libscols_iter itr;
+ 
+ 	assert(ln);
+ 
+-	DBG(TAB, ul_debugobj(tb, "printing line, line=%p, buff=%p", ln, buf));
++	DBG(TAB, ul_debugobj(tb, "printing line"));
+ 
++	/* regular line */
+ 	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 	while (rc == 0 && scols_table_next_column(tb, &itr, &cl) == 0) {
++		if (scols_column_is_hidden(cl))
++			continue;
+ 		rc = cell_to_buffer(tb, ln, cl, buf);
+-		if (!rc)
++		if (rc == 0)
+ 			rc = print_data(tb, cl, ln,
+ 					scols_line_get_cell(ln, cl->seqnum),
+ 					buf);
++		if (rc == 0 && cl->pending_data)
++			pending = 1;
++	}
++
++	/* extra lines of the multi-line cells */
++	while (rc == 0 && pending) {
++		pending = 0;
++		fputs(linesep(tb), tb->out);
++		tb->termlines_used++;
++		scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++		while (rc == 0 && scols_table_next_column(tb, &itr, &cl) == 0) {
++			if (scols_column_is_hidden(cl))
++				continue;
++			if (cl->pending_data) {
++				rc = print_pending_data(tb, cl, ln, scols_line_get_cell(ln, cl->seqnum));
++				if (rc == 0 && cl->pending_data)
++					pending = 1;
++			} else
++				print_empty_cell(tb, cl, ln, buf->bufsz);
++		}
+ 	}
+ 
+-	if (rc == 0)
+-		fputs(linesep(tb), tb->out);
+-	return 0;
++	return 0;
++}
++
++static int print_title(struct libscols_table *tb)
++{
++	int rc, color = 0;
++	mbs_align_t align;
++	size_t width, len = 0, bufsz, titlesz;
++	char *title = NULL, *buf = NULL;
++
++	assert(tb);
++
++	if (!tb->title.data)
++		return 0;
++
++	DBG(TAB, ul_debugobj(tb, "printing title"));
++
++	/* encode data */
++	if (tb->no_encode) {
++		len = bufsz = strlen(tb->title.data) + 1;
++		buf = strdup(tb->title.data);
++		if (!buf) {
++			rc = -ENOMEM;
++			goto done;
++		}
++	} else {
++		bufsz = mbs_safe_encode_size(strlen(tb->title.data)) + 1;
++		if (bufsz == 1) {
++			DBG(TAB, ul_debugobj(tb, "title is empty string -- ignore"));
++			return 0;
++		}
++		buf = malloc(bufsz);
++		if (!buf) {
++			rc = -ENOMEM;
++			goto done;
++		}
++
++		if (!mbs_safe_encode_to_buffer(tb->title.data, &len, buf, NULL) ||
++		    !len || len == (size_t) -1) {
++			rc = -EINVAL;
++			goto done;
++		}
++	}
++
++	/* truncate and align */
++	width = tb->is_term ? tb->termwidth : 80;
++	titlesz = width + bufsz;
++
++	title = malloc(titlesz);
++	if (!title) {
++		rc = -EINVAL;
++		goto done;
++	}
++
++	switch (scols_cell_get_alignment(&tb->title)) {
++	case SCOLS_CELL_FL_RIGHT:
++		align = MBS_ALIGN_RIGHT;
++		break;
++	case SCOLS_CELL_FL_CENTER:
++		align = MBS_ALIGN_CENTER;
++		break;
++	case SCOLS_CELL_FL_LEFT:
++	default:
++		align = MBS_ALIGN_LEFT;
++		/*
++		 * Don't print extra blank chars after the title if on left
++		 * (that's same as we use for the last column in the table).
++		 */
++		if (len < width
++		    && !scols_table_is_maxout(tb)
++		    && isblank(*titlepadding_symbol(tb)))
++			width = len;
++		break;
++
++	}
++
++	/* copy from buf to title and align to width with title_padding */
++	rc = mbsalign_with_padding(buf, title, titlesz,
++			&width, align,
++			0, (int) *titlepadding_symbol(tb));
++
++	if (rc == -1) {
++		rc = -EINVAL;
++		goto done;
++	}
++
++	if (tb->colors_wanted && tb->title.color)
++		color = 1;
++	if (color)
++		fputs(tb->title.color, tb->out);
++
++	fputs(title, tb->out);
++
++	if (color)
++		fputs(UL_COLOR_RESET, tb->out);
++
++	fputc('\n', tb->out);
++	rc = 0;
++done:
++	free(buf);
++	free(title);
++	DBG(TAB, ul_debugobj(tb, "printing title done [rc=%d]", rc));
++	return rc;
+ }
+ 
+ static int print_header(struct libscols_table *tb, struct libscols_buffer *buf)
+@@ -376,86 +882,139 @@ static int print_header(struct libscols_table *tb, struct libscols_buffer *buf)
+ 
+ 	assert(tb);
+ 
+-	if (scols_table_is_noheadings(tb) ||
++	if ((tb->header_printed == 1 && tb->header_repeat == 0) ||
++	    scols_table_is_noheadings(tb) ||
+ 	    scols_table_is_export(tb) ||
++	    scols_table_is_json(tb) ||
+ 	    list_empty(&tb->tb_lines))
+ 		return 0;
+ 
+ 	DBG(TAB, ul_debugobj(tb, "printing header"));
+ 
+-	/* set width according to the size of data
+-	 */
++	/* set the width according to the size of the data */
+ 	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 	while (rc == 0 && scols_table_next_column(tb, &itr, &cl) == 0) {
++		if (scols_column_is_hidden(cl))
++			continue;
+ 		rc = buffer_set_data(buf, scols_cell_get_data(&cl->header));
+ 		if (!rc)
+ 			rc = print_data(tb, cl, NULL, &cl->header, buf);
+ 	}
+ 
+-	if (rc == 0)
++	if (rc == 0) {
+ 		fputs(linesep(tb), tb->out);
++		tb->termlines_used++;
++	}
++
++	tb->header_printed = 1;
++	tb->header_next = tb->termlines_used + tb->termheight;
++	if (tb->header_repeat)
++		DBG(TAB, ul_debugobj(tb, "\tnext header: %zu [current=%zu]",
++					tb->header_next, tb->termlines_used));
+ 	return rc;
+ }
+ 
+-static int print_table(struct libscols_table *tb, struct libscols_buffer *buf)
++
++static int print_range(	struct libscols_table *tb,
++			struct libscols_buffer *buf,
++			struct libscols_iter *itr,
++			struct libscols_line *end)
+ {
+-	int rc;
++	int rc = 0;
+ 	struct libscols_line *ln;
+-	struct libscols_iter itr;
+ 
+ 	assert(tb);
++	DBG(TAB, ul_debugobj(tb, "printing range"));
+ 
+-	rc = print_header(tb, buf);
++	while (rc == 0 && scols_table_next_line(tb, itr, &ln) == 0) {
+ 
+-	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+-	while (rc == 0 && scols_table_next_line(tb, &itr, &ln) == 0)
++		int last = scols_iter_is_last(itr);
++
++		fput_line_open(tb);
+ 		rc = print_line(tb, ln, buf);
++		fput_line_close(tb, last, last);
++
++		if (end && ln == end)
++			break;
++
++		if (!last && want_repeat_header(tb))
++			print_header(tb, buf);
++	}
+ 
+ 	return rc;
++
++}
++
++static int print_table(struct libscols_table *tb, struct libscols_buffer *buf)
++{
++	struct libscols_iter itr;
++
++	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++	return print_range(tb, buf, &itr, NULL);
+ }
+ 
++
+ static int print_tree_line(struct libscols_table *tb,
+ 			   struct libscols_line *ln,
+-			   struct libscols_buffer *buf)
++			   struct libscols_buffer *buf,
++			   int last,
++			   int last_in_table)
+ {
+ 	int rc;
+-	struct list_head *p;
+ 
++	/* print the line */
++	fput_line_open(tb);
+ 	rc = print_line(tb, ln, buf);
+ 	if (rc)
+-		return rc;
+-	if (list_empty(&ln->ln_branch))
+-		return 0;
++		goto done;
+ 
+-	/* print all children */
+-	list_for_each(p, &ln->ln_branch) {
+-		struct libscols_line *chld =
+-				list_entry(p, struct libscols_line, ln_children);
+-		rc = print_tree_line(tb, chld, buf);
+-		if (rc)
+-			break;
++	/* print children */
++	if (!list_empty(&ln->ln_branch)) {
++		struct list_head *p;
++
++		fput_children_open(tb);
++
++		/* print all children */
++		list_for_each(p, &ln->ln_branch) {
++			struct libscols_line *chld =
++					list_entry(p, struct libscols_line, ln_children);
++			int last_child = p->next == &ln->ln_branch;
++
++			rc = print_tree_line(tb, chld, buf, last_child, last_in_table && last_child);
++			if (rc)
++				goto done;
++		}
++
++		fput_children_close(tb);
+ 	}
+ 
++	if (list_empty(&ln->ln_branch) || scols_table_is_json(tb))
++		fput_line_close(tb, last, last_in_table);
++done:
+ 	return rc;
+ }
+ 
+ static int print_tree(struct libscols_table *tb, struct libscols_buffer *buf)
+ {
+-	int rc;
+-	struct libscols_line *ln;
++	int rc = 0;
++	struct libscols_line *ln, *last = NULL;
+ 	struct libscols_iter itr;
+ 
+ 	assert(tb);
+ 
+ 	DBG(TAB, ul_debugobj(tb, "printing tree"));
+ 
+-	rc = print_header(tb, buf);
++	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++
++	while (scols_table_next_line(tb, &itr, &ln) == 0)
++		if (!last || !ln->parent)
++			last = ln;
+ 
+ 	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 	while (rc == 0 && scols_table_next_line(tb, &itr, &ln) == 0) {
+ 		if (ln->parent)
+ 			continue;
+-		rc = print_tree_line(tb, ln, buf);
++		rc = print_tree_line(tb, ln, buf, ln == last, ln == last);
+ 	}
+ 
+ 	return rc;
+@@ -463,9 +1022,14 @@ static int print_tree(struct libscols_table *tb, struct libscols_buffer *buf)
+ 
+ static void dbg_column(struct libscols_table *tb, struct libscols_column *cl)
+ {
++	if (scols_column_is_hidden(cl)) {
++		DBG(COL, ul_debugobj(cl, "%s (hidden) ignored", cl->header.data));
++		return;
++	}
++
+ 	DBG(COL, ul_debugobj(cl, "%15s seq=%zu, width=%zd, "
+ 				 "hint=%d, avg=%zu, max=%zu, min=%zu, "
+-				 "extreme=%s",
++				 "extreme=%s %s",
+ 
+ 		cl->header.data, cl->seqnum, cl->width,
+ 		cl->width_hint > 1 ? (int) cl->width_hint :
+@@ -473,7 +1037,8 @@ static void dbg_column(struct libscols_table *tb, struct libscols_column *cl)
+ 		cl->width_avg,
+ 		cl->width_max,
+ 		cl->width_min,
+-		cl->is_extreme ? "yes" : "not"));
++		cl->is_extreme ? "yes" : "not",
++		cl->flags & SCOLS_FL_TRUNC ? "trunc" : ""));
+ }
+ 
+ static void dbg_columns(struct libscols_table *tb)
+@@ -486,14 +1051,15 @@ static void dbg_columns(struct libscols_table *tb)
+ 		dbg_column(tb, cl);
+ }
+ 
++
+ /*
+  * This function counts column width.
+  *
+- * For the SCOLS_FL_NOEXTREMES columns is possible to call this function two
+- * times.  The first pass counts width and average width. If the column
+- * contains too large fields (width greater than 2 * average) then the column
+- * is marked as "extreme". In the second pass all extreme fields are ignored
+- * and column width is counted from non-extreme fields only.
++ * For the SCOLS_FL_NOEXTREMES columns it is possible to call this function
++ * two times. The first pass counts the width and average width. If the column
++ * contains fields that are too large (a width greater than 2 * average) then
++ * the column is marked as "extreme". In the second pass all extreme fields
++ * are ignored and the column width is counted from non-extreme fields only.
+  */
+ static int count_column_width(struct libscols_table *tb,
+ 			      struct libscols_column *cl,
+@@ -508,6 +1074,19 @@ static int count_column_width(struct libscols_table *tb,
+ 	assert(cl);
+ 
+ 	cl->width = 0;
++	if (!cl->width_min) {
++		if (cl->width_hint < 1 && scols_table_is_maxout(tb) && tb->is_term) {
++			cl->width_min = (size_t) (cl->width_hint * tb->termwidth);
++			if (cl->width_min && !is_last_column(cl))
++				cl->width_min--;
++		}
++		if (scols_cell_get_data(&cl->header)) {
++			size_t len = mbs_safe_width(scols_cell_get_data(&cl->header));
++			cl->width_min = max(cl->width_min, len);
++		}
++		if (!cl->width_min)
++			cl->width_min = 1;
++	}
+ 
+ 	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 	while (scols_table_next_line(tb, &itr, &ln) == 0) {
+@@ -516,15 +1095,20 @@ static int count_column_width(struct libscols_table *tb,
+ 
+ 		rc = cell_to_buffer(tb, ln, cl, buf);
+ 		if (rc)
+-			return rc;
++			goto done;
+ 
+ 		data = buffer_get_data(buf);
+-		len = data ? mbs_safe_width(data) : 0;
++
++		if (!data)
++			len = 0;
++		else if (scols_column_is_customwrap(cl))
++			len = cl->wrap_chunksize(cl, data, cl->wrapfunc_data);
++		else
++			len = mbs_safe_width(data);
+ 
+ 		if (len == (size_t) -1)		/* ignore broken multibyte strings */
+ 			len = 0;
+-		if (len > cl->width_max)
+-			cl->width_max = len;
++		cl->width_max = max(len, cl->width_max);
+ 
+ 		if (cl->is_extreme && len > cl->width_avg * 2)
+ 			continue;
+@@ -532,81 +1116,105 @@ static int count_column_width(struct libscols_table *tb,
+ 			sum += len;
+ 			count++;
+ 		}
+-		if (len > cl->width)
+-			cl->width = len;
++		cl->width = max(len, cl->width);
++		if (scols_column_is_tree(cl)) {
++			size_t treewidth = buffer_get_safe_art_size(buf);
++			cl->width_treeart = max(cl->width_treeart, treewidth);
++		}
+ 	}
+ 
+ 	if (count && cl->width_avg == 0) {
+ 		cl->width_avg = sum / count;
+-
+ 		if (cl->width_max > cl->width_avg * 2)
+ 			cl->is_extreme = 1;
+ 	}
+ 
+-	/* check and set minimal column width */
+-	if (scols_cell_get_data(&cl->header))
+-		cl->width_min = mbs_safe_width(scols_cell_get_data(&cl->header));
+-
+ 	/* enlarge to minimal width */
+ 	if (cl->width < cl->width_min && !scols_column_is_strict_width(cl))
+ 		cl->width = cl->width_min;
+ 
+-	/* use relative size for large columns */
++	/* use absolute size for large columns */
+ 	else if (cl->width_hint >= 1 && cl->width < (size_t) cl->width_hint
+ 		 && cl->width_min < (size_t) cl->width_hint)
+ 
+ 		cl->width = (size_t) cl->width_hint;
+ 
++done:
+ 	ON_DBG(COL, dbg_column(tb, cl));
+ 	return rc;
+ }
+ 
+-
+ /*
+- * This is core of the scols_* voodo...
++ * This is core of the scols_* voodoo...
+  */
+ static int recount_widths(struct libscols_table *tb, struct libscols_buffer *buf)
+ {
+ 	struct libscols_column *cl;
+ 	struct libscols_iter itr;
+-	size_t width = 0;		/* output width */
+-	int trunc_only, rc = 0;
++	size_t width = 0, width_min = 0;	/* output width */
++	int stage, rc = 0;
+ 	int extremes = 0;
++	size_t colsepsz;
+ 
+ 
+ 	DBG(TAB, ul_debugobj(tb, "recounting widths (termwidth=%zu)", tb->termwidth));
+ 
++	colsepsz = mbs_safe_width(colsep(tb));
++
+ 	/* set basic columns width
+ 	 */
+ 	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 	while (scols_table_next_column(tb, &itr, &cl) == 0) {
++		int is_last;
++
++		if (scols_column_is_hidden(cl))
++			continue;
+ 		rc = count_column_width(tb, cl, buf);
+ 		if (rc)
+-			return rc;
++			goto done;
++
++		is_last = is_last_column(cl);
+ 
+-		width += cl->width + (is_last_column(tb, cl) ? 0 : 1);
++		width += cl->width + (is_last ? 0 : colsepsz);		/* separator for non-last column */
++		width_min += cl->width_min + (is_last ? 0 : colsepsz);
+ 		extremes += cl->is_extreme;
+ 	}
+ 
+-	if (!tb->is_term)
+-		return 0;
++	if (!tb->is_term) {
++		DBG(TAB, ul_debugobj(tb, " non-terminal output"));
++		goto done;
++	}
+ 
+-	/* reduce columns with extreme fields
+-	 */
++	/* be paranoid */
++	if (width_min > tb->termwidth && scols_table_is_maxout(tb)) {
++		DBG(TAB, ul_debugobj(tb, " min width larger than terminal! [width=%zu, term=%zu]", width_min, tb->termwidth));
++
++		scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++		while (width_min > tb->termwidth
++		       && scols_table_next_column(tb, &itr, &cl) == 0) {
++			if (scols_column_is_hidden(cl))
++				continue;
++			width_min--;
++			cl->width_min--;
++		}
++		DBG(TAB, ul_debugobj(tb, " min width reduced to %zu", width_min));
++	}
++
++	/* reduce columns with extreme fields */
+ 	if (width > tb->termwidth && extremes) {
+-		DBG(TAB, ul_debugobj(tb, "   reduce width (extreme columns)"));
++		DBG(TAB, ul_debugobj(tb, " reduce width (extreme columns)"));
+ 
+ 		scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 		while (scols_table_next_column(tb, &itr, &cl) == 0) {
+ 			size_t org_width;
+ 
+-			if (!cl->is_extreme)
++			if (!cl->is_extreme || scols_column_is_hidden(cl))
+ 				continue;
+ 
+ 			org_width = cl->width;
+ 			rc = count_column_width(tb, cl, buf);
+ 			if (rc)
+-				return rc;
++				goto done;
+ 
+ 			if (org_width > cl->width)
+ 				width -= org_width - cl->width;
+@@ -617,17 +1225,17 @@ static int recount_widths(struct libscols_table *tb, struct libscols_buffer *buf
+ 
+ 	if (width < tb->termwidth) {
+ 		if (extremes) {
+-			DBG(TAB, ul_debugobj(tb, "   enlarge width (extreme columns)"));
++			DBG(TAB, ul_debugobj(tb, " enlarge width (extreme columns)"));
+ 
+ 			/* enlarge the first extreme column */
+ 			scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 			while (scols_table_next_column(tb, &itr, &cl) == 0) {
+ 				size_t add;
+ 
+-				if (!cl->is_extreme)
++				if (!cl->is_extreme || scols_column_is_hidden(cl))
+ 					continue;
+ 
+-				/* this column is tooo large, ignore?
++				/* this column is too large, ignore?
+ 				if (cl->width_max - cl->width >
+ 						(tb->termwidth - width))
+ 					continue;
+@@ -646,12 +1254,14 @@ static int recount_widths(struct libscols_table *tb, struct libscols_buffer *buf
+ 		}
+ 
+ 		if (width < tb->termwidth && scols_table_is_maxout(tb)) {
+-			DBG(TAB, ul_debugobj(tb, "   enlarge width (max-out)"));
++			DBG(TAB, ul_debugobj(tb, " enlarge width (max-out)"));
+ 
+-			/* try enlarge all columns */
++			/* try enlarging all columns */
+ 			while (width < tb->termwidth) {
+ 				scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 				while (scols_table_next_column(tb, &itr, &cl) == 0) {
++					if (scols_column_is_hidden(cl))
++						continue;
+ 					cl->width++;
+ 					width++;
+ 					if (width == tb->termwidth)
+@@ -660,67 +1270,133 @@ static int recount_widths(struct libscols_table *tb, struct libscols_buffer *buf
+ 			}
+ 		} else if (width < tb->termwidth) {
+ 			/* enlarge the last column */
+-			struct libscols_column *cl = list_entry(
++			struct libscols_column *col = list_entry(
+ 				tb->tb_columns.prev, struct libscols_column, cl_columns);
+ 
+-			DBG(TAB, ul_debugobj(tb, "   enlarge width (last column)"));
++			DBG(TAB, ul_debugobj(tb, " enlarge width (last column)"));
+ 
+-			if (!scols_column_is_right(cl) && tb->termwidth - width > 0) {
+-				cl->width += tb->termwidth - width;
++			if (!scols_column_is_right(col) && tb->termwidth - width > 0) {
++				col->width += tb->termwidth - width;
+ 				width = tb->termwidth;
+ 			}
+ 		}
+ 	}
+ 
+-	/* bad, we have to reduce output width, this is done in two steps:
+-	 * 1/ reduce columns with a relative width and with truncate flag
+-	 * 2) reduce columns with a relative width without truncate flag
++	/* bad, we have to reduce output width, this is done in three stages:
++	 *
++	 * 1) trunc relative with trunc flag if the column width is greater than
++	 *    expected column width (it means "width_hint * terminal_width").
++	 *
++	 * 2) trunc all with trunc flag
++	 *
++	 * 3) trunc relative without trunc flag
++	 *
++	 * Note that SCOLS_FL_WRAP (if no custom wrap function is specified) is
++	 * interpreted as SCOLS_FL_TRUNC.
+ 	 */
+-	trunc_only = 1;
+-	while (width > tb->termwidth) {
+-		size_t org = width;
++	for (stage = 1; width > tb->termwidth && stage <= 3; ) {
++		size_t org_width = width;
+ 
+-		DBG(TAB, ul_debugobj(tb, "   reduce width (current=%zu, "
+-					 "wanted=%zu, mode=%s)",
+-					width, tb->termwidth,
+-					trunc_only ? "trunc-only" : "all-relative"));
++		DBG(TAB, ul_debugobj(tb, " reduce width - #%d stage (current=%zu, wanted=%zu)",
++				stage, width, tb->termwidth));
+ 
+ 		scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 		while (scols_table_next_column(tb, &itr, &cl) == 0) {
++
++			int trunc_flag = 0;
++
++			DBG(TAB, ul_debugobj(cl, "   checking %s (width=%zu, treeart=%zu)",
++						cl->header.data, cl->width, cl->width_treeart));
++			if (scols_column_is_hidden(cl))
++				continue;
+ 			if (width <= tb->termwidth)
+ 				break;
+-			if (cl->width_hint > 1 && !scols_column_is_trunc(cl))
+-				continue;	/* never truncate columns with absolute sizes */
+-			if (scols_column_is_tree(cl))
+-				continue;	/* never truncate the tree */
+-			if (trunc_only && !scols_column_is_trunc(cl))
+-				continue;
++
++			/* never truncate if already minimal width */
+ 			if (cl->width == cl->width_min)
+ 				continue;
+ 
+-			/* truncate column with relative sizes */
+-			if (cl->width_hint < 1 && cl->width > 0 && width > 0 &&
+-			    cl->width > cl->width_hint * tb->termwidth) {
++			/* never truncate the tree */
++			if (scols_column_is_tree(cl) && width <= cl->width_treeart)
++				continue;
++
++			/* nothing to truncate */
++			if (cl->width == 0 || width == 0)
++				continue;
++
++			trunc_flag = scols_column_is_trunc(cl)
++				    || (scols_column_is_wrap(cl) && !scols_column_is_customwrap(cl));
++
++			switch (stage) {
++			/* #1 stage - trunc relative with TRUNC flag */
++			case 1:
++				if (!trunc_flag)		/* ignore: missing flag */
++					break;
++				if (cl->width_hint <= 0 || cl->width_hint >= 1)	/* ignore: no relative */
++					break;
++				if (cl->width < (size_t) (cl->width_hint * tb->termwidth)) /* ignore: smaller than expected width */
++					break;
++
++				DBG(TAB, ul_debugobj(tb, "     reducing (relative with flag)"));
+ 				cl->width--;
+ 				width--;
+-			}
+-			/* truncate column with absolute size */
+-			if (cl->width_hint > 1 && cl->width > 0 && width > 0 &&
+-			    !trunc_only) {
++				break;
++
++			/* #2 stage - trunc all with TRUNC flag */
++			case 2:
++				if (!trunc_flag)		/* ignore: missing flag */
++					break;
++
++				DBG(TAB, ul_debugobj(tb, "     reducing (all with flag)"));
+ 				cl->width--;
+ 				width--;
++				break;
++
++			/* #3 stage - trunc relative without flag */
++			case 3:
++				if (cl->width_hint <= 0 || cl->width_hint >= 1)	/* ignore: no relative */
++					break;
++
++				DBG(TAB, ul_debugobj(tb, "     reducing (relative without flag)"));
++				cl->width--;
++				width--;
++				break;
+ 			}
+ 
++			/* hide zero width columns */
++			if (cl->width == 0)
++				cl->flags |= SCOLS_FL_HIDDEN;
+ 		}
+-		if (org == width) {
+-			if (trunc_only)
+-				trunc_only = 0;
+-			else
++
++		/* the current stage is without effect, go to the next */
++		if (org_width == width)
++			stage++;
++	}
++
++	/* ignore last column(s) or force last column to be truncated if
++	 * nowrap mode enabled */
++	if (tb->no_wrap && width > tb->termwidth) {
++		scols_reset_iter(&itr, SCOLS_ITER_BACKWARD);
++		while (scols_table_next_column(tb, &itr, &cl) == 0) {
++
++			if (scols_column_is_hidden(cl))
++				continue;
++			if (width <= tb->termwidth)
+ 				break;
++			if (width - cl->width < tb->termwidth) {
++				size_t r =  width - tb->termwidth;
++
++				cl->flags |= SCOLS_FL_TRUNC;
++				cl->width -= r;
++				width -= r;
++			} else {
++				cl->flags |= SCOLS_FL_HIDDEN;
++				width -= cl->width + colsepsz;
++			}
+ 		}
+ 	}
+-
+-	DBG(TAB, ul_debugobj(tb, "  result: %zu", width));
++done:
++	DBG(TAB, ul_debugobj(tb, " final width: %zu (rc=%d)", width, rc));
+ 	ON_DBG(TAB, dbg_columns(tb));
+ 
+ 	return rc;
+@@ -742,64 +1418,281 @@ static size_t strlen_line(struct libscols_line *ln)
+ 	return sz;
+ }
+ 
++static void cleanup_printing(struct libscols_table *tb, struct libscols_buffer *buf)
++{
++	if (!tb)
++		return;
+ 
++	free_buffer(buf);
+ 
+-/**
+- * scols_print_table:
+- * @tb: table
+- *
+- * Prints the table to the output stream.
+- *
+- * Returns: 0, a negative value in case of an error.
+- */
+-int scols_print_table(struct libscols_table *tb)
++	if (tb->priv_symbols) {
++		scols_table_set_symbols(tb, NULL);
++		tb->priv_symbols = 0;
++	}
++}
++
++static int initialize_printing(struct libscols_table *tb, struct libscols_buffer **buf)
+ {
+-	int rc = 0;
+-	size_t bufsz;
++	size_t bufsz, extra_bufsz = 0;
+ 	struct libscols_line *ln;
+ 	struct libscols_iter itr;
+-	struct libscols_buffer *buf;
++	int rc;
+ 
+-	assert(tb);
+-	if (!tb)
+-		return -1;
++	DBG(TAB, ul_debugobj(tb, "initialize printing"));
++	*buf = NULL;
+ 
+-	DBG(TAB, ul_debugobj(tb, "printing"));
+-	if (!tb->symbols)
+-		scols_table_set_symbols(tb, NULL);	/* use default */
++	if (!tb->symbols) {
++		rc = scols_table_set_default_symbols(tb);
++		if (rc)
++			goto err;
++		tb->priv_symbols = 1;
++	} else
++		tb->priv_symbols = 0;
++
++	if (tb->format == SCOLS_FMT_HUMAN)
++		tb->is_term = tb->termforce == SCOLS_TERMFORCE_NEVER  ? 0 :
++			      tb->termforce == SCOLS_TERMFORCE_ALWAYS ? 1 :
++			      isatty(STDOUT_FILENO);
++
++	if (tb->is_term) {
++		size_t width = (size_t) scols_table_get_termwidth(tb);
++
++		if (tb->termreduce > 0 && tb->termreduce < width) {
++			width -= tb->termreduce;
++			scols_table_set_termwidth(tb, width);
++		}
++		bufsz = width;
++	} else
++		bufsz = BUFSIZ;
+ 
+-	tb->is_term = isatty(STDOUT_FILENO) ? 1 : 0;
+-	tb->termwidth = tb->is_term ? get_terminal_width() : 0;
+-	if (tb->termwidth <= 0)
+-		tb->termwidth = 80;
+-	tb->termwidth -= tb->termreduce;
++	if (!tb->is_term || tb->format != SCOLS_FMT_HUMAN || scols_table_is_tree(tb))
++		tb->header_repeat = 0;
+ 
+-	bufsz = tb->termwidth;
++	/*
++	 * Estimate extra space necessary for tree, JSON or another output
++	 * decoration.
++	 */
++	if (scols_table_is_tree(tb))
++		extra_bufsz += tb->nlines * strlen(vertical_symbol(tb));
++
++	switch (tb->format) {
++	case SCOLS_FMT_RAW:
++		extra_bufsz += tb->ncols;			/* separator between columns */
++		break;
++	case SCOLS_FMT_JSON:
++		if (tb->format == SCOLS_FMT_JSON)
++			extra_bufsz += tb->nlines * 3;		/* indention */
++		/* fallthrough */
++	case SCOLS_FMT_EXPORT:
++	{
++		struct libscols_column *cl;
++
++		scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++
++		while (scols_table_next_column(tb, &itr, &cl) == 0) {
++			if (scols_column_is_hidden(cl))
++				continue;
++			extra_bufsz += strlen(scols_cell_get_data(&cl->header));	/* data */
++			extra_bufsz += 2;						/* separators */
++		}
++		break;
++	}
++	case SCOLS_FMT_HUMAN:
++		break;
++	}
+ 
++	/*
++	 * Enlarge buffer if necessary, the buffer should be large enough to
++	 * store line data and tree ascii art (or another decoration).
++	 */
+ 	scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
+ 	while (scols_table_next_line(tb, &itr, &ln) == 0) {
+-		size_t sz = strlen_line(ln);
++		size_t sz;
++
++		sz = strlen_line(ln) + extra_bufsz;
+ 		if (sz > bufsz)
+ 			bufsz = sz;
+ 	}
+ 
+-	buf = new_buffer(bufsz + 1);	/* data + space for \0 */
+-	if (!buf)
+-		return -ENOMEM;
++	*buf = new_buffer(bufsz + 1);	/* data + space for \0 */
++	if (!*buf) {
++		rc = -ENOMEM;
++		goto err;
++	}
+ 
+-	if (!(scols_table_is_raw(tb) || scols_table_is_export(tb))) {
+-		rc = recount_widths(tb, buf);
++	if (tb->format == SCOLS_FMT_HUMAN) {
++		rc = recount_widths(tb, *buf);
+ 		if (rc != 0)
++			goto err;
++	}
++
++	return 0;
++err:
++	cleanup_printing(tb, *buf);
++	return rc;
++}
++
++/**
++ * scola_table_print_range:
++ * @tb: table
++ * @start: first printed line or NULL to print from the begin of the table
++ * @end: last printed line or NULL to print all from start.
++ *
++ * If the start is the first line in the table than prints table header too.
++ * The header is printed only once. This does not work for trees.
++ *
++ * Returns: 0, a negative value in case of an error.
++ */
++int scols_table_print_range(	struct libscols_table *tb,
++				struct libscols_line *start,
++				struct libscols_line *end)
++{
++	struct libscols_buffer *buf = NULL;
++	struct libscols_iter itr;
++	int rc;
++
++	if (scols_table_is_tree(tb))
++		return -EINVAL;
++
++	DBG(TAB, ul_debugobj(tb, "printing range from API"));
++
++	rc = initialize_printing(tb, &buf);
++	if (rc)
++		return rc;
++
++	if (start) {
++		itr.direction = SCOLS_ITER_FORWARD;
++		itr.head = &tb->tb_lines;
++		itr.p = &start->ln_lines;
++	} else
++		scols_reset_iter(&itr, SCOLS_ITER_FORWARD);
++
++	if (!start || itr.p == tb->tb_lines.next) {
++		rc = print_header(tb, buf);
++		if (rc)
+ 			goto done;
+ 	}
+ 
++	rc = print_range(tb, buf, &itr, end);
++done:
++	cleanup_printing(tb, buf);
++	return rc;
++}
++
++/**
++ * scols_table_print_range_to_string:
++ * @tb: table
++ * @start: first printed line or NULL to print from the beginning of the table
++ * @end: last printed line or NULL to print all from start.
++ * @data: pointer to the beginning of a memory area to print to
++ *
++ * The same as scols_table_print_range(), but prints to @data instead of
++ * stream.
++ *
++ * Returns: 0, a negative value in case of an error.
++ */
++#ifdef HAVE_OPEN_MEMSTREAM
++int scols_table_print_range_to_string(	struct libscols_table *tb,
++					struct libscols_line *start,
++					struct libscols_line *end,
++					char **data)
++{
++	FILE *stream, *old_stream;
++	size_t sz;
++	int rc;
++
++	if (!tb)
++		return -EINVAL;
++
++	DBG(TAB, ul_debugobj(tb, "printing range to string"));
++
++	/* create a stream for output */
++	stream = open_memstream(data, &sz);
++	if (!stream)
++		return -ENOMEM;
++
++	old_stream = scols_table_get_stream(tb);
++	scols_table_set_stream(tb, stream);
++	rc = scols_table_print_range(tb, start, end);
++	fclose(stream);
++	scols_table_set_stream(tb, old_stream);
++
++	return rc;
++}
++#else
++int scols_table_print_range_to_string(
++			struct libscols_table *tb __attribute__((__unused__)),
++			struct libscols_line *start __attribute__((__unused__)),
++			struct libscols_line *end __attribute__((__unused__)),
++			char **data __attribute__((__unused__)))
++{
++	return -ENOSYS;
++}
++#endif
++
++static int __scols_print_table(struct libscols_table *tb, int *is_empty)
++{
++	int rc = 0;
++	struct libscols_buffer *buf = NULL;
++
++	if (!tb)
++		return -EINVAL;
++
++	DBG(TAB, ul_debugobj(tb, "printing"));
++	if (is_empty)
++		*is_empty = 0;
++
++	if (list_empty(&tb->tb_columns)) {
++		DBG(TAB, ul_debugobj(tb, "error -- no columns"));
++		return -EINVAL;
++	}
++	if (list_empty(&tb->tb_lines)) {
++		DBG(TAB, ul_debugobj(tb, "ignore -- no lines"));
++		if (is_empty)
++			*is_empty = 1;
++		return 0;
++	}
++
++	tb->header_printed = 0;
++	rc = initialize_printing(tb, &buf);
++	if (rc)
++		return rc;
++
++	fput_table_open(tb);
++
++	if (tb->format == SCOLS_FMT_HUMAN)
++		print_title(tb);
++
++	rc = print_header(tb, buf);
++	if (rc)
++		goto done;
++
+ 	if (scols_table_is_tree(tb))
+ 		rc = print_tree(tb, buf);
+ 	else
+ 		rc = print_table(tb, buf);
+ 
++	fput_table_close(tb);
+ done:
+-	free_buffer(buf);
++	cleanup_printing(tb, buf);
++	return rc;
++}
++
++/**
++ * scols_print_table:
++ * @tb: table
++ *
++ * Prints the table to the output stream and terminate by \n.
++ *
++ * Returns: 0, a negative value in case of an error.
++ */
++int scols_print_table(struct libscols_table *tb)
++{
++	int empty = 0;
++	int rc = __scols_print_table(tb, &empty);
++
++	if (rc == 0 && !empty)
++		fputc('\n', tb->out);
+ 	return rc;
+ }
+ 
+@@ -812,10 +1705,10 @@ done:
+  *
+  * Returns: 0, a negative value in case of an error.
+  */
++#ifdef HAVE_OPEN_MEMSTREAM
+ int scols_print_table_to_string(struct libscols_table *tb, char **data)
+ {
+-#ifdef HAVE_OPEN_MEMSTREAM
+-	FILE *stream;
++	FILE *stream, *old_stream;
+ 	size_t sz;
+ 	int rc;
+ 
+@@ -829,13 +1722,20 @@ int scols_print_table_to_string(struct libscols_table *tb, char **data)
+ 	if (!stream)
+ 		return -ENOMEM;
+ 
++	old_stream = scols_table_get_stream(tb);
+ 	scols_table_set_stream(tb, stream);
+-	rc = scols_print_table(tb);
++	rc = __scols_print_table(tb, NULL);
+ 	fclose(stream);
++	scols_table_set_stream(tb, old_stream);
+ 
+ 	return rc;
++}
+ #else
++int scols_print_table_to_string(
++		struct libscols_table *tb __attribute__((__unused__)),
++		char **data  __attribute__((__unused__)))
++{
+ 	return -ENOSYS;
+-#endif
+ }
++#endif
+ 
+-- 
+2.14.4
+

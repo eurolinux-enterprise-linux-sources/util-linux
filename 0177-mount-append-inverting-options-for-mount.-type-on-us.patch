@@ -1,0 +1,41 @@
+From 4b376d1ad1b46408bc59d949c277991a9b5035eb Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Thu, 27 Oct 2016 15:30:20 +0200
+Subject: [PATCH 177/178] mount: append inverting options for mount.<type> on
+ "users"
+
+If you call mount(8) as root, then we need to append inverting options
+(if specified by fstab) for "user" and "users" to /sbin/mount.<type>
+command line, because for UID=0 mount.nfs follows command line rather
+than the fstab setting.
+
+This has been originally implemented by commit
+a4c0cc75ff9744299f108c259efab1bd30c8007a for the old mount(8). The
+same feature is supported by libmount, unfortunately for "user" only.
+We need the same also for "users" to be backwardly compatible.
+
+Addresses: https://github.com/karelzak/util-linux/issues/368
+Addresses: https://bugzilla.redhat.com/show_bug.cgi?id=1618711
+Upstream: http://github.com/karelzak/util-linux/commit/3c4a3de0fcb8f21bffacfd8bdc3d6fbd683c71f5
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ libmount/src/context_mount.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/libmount/src/context_mount.c b/libmount/src/context_mount.c
+index 4df2646b0..0f4485592 100644
+--- a/libmount/src/context_mount.c
++++ b/libmount/src/context_mount.c
+@@ -321,7 +321,8 @@ static int generate_helper_optstr(struct libmnt_context *cxt, char **optstr)
+ 	if (!*optstr)
+ 		return -ENOMEM;
+ 
+-	if (cxt->user_mountflags & MNT_MS_USER) {
++	if ((cxt->user_mountflags & MNT_MS_USER) ||
++	    (cxt->user_mountflags & MNT_MS_USERS)) {
+ 		/*
+ 		 * This is unnecessary for real user-mounts as mount.<type>
+ 		 * helpers have to always follow fstab rather than mount
+-- 
+2.14.4
+
