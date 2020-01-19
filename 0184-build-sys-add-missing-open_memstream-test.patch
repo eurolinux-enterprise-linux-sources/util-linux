@@ -1,0 +1,26 @@
+From 43e53c69be2337b75e01919b14681e207ee05251 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Thu, 21 Mar 2019 13:54:19 +0100
+Subject: [PATCH 184/185] build-sys: add missing open_memstream() test
+
+Addresses: https://bugzilla.redhat.com/show_bug.cgi?id=1667942
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ configure.ac | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/configure.ac b/configure.ac
+index 3f07df495..7381a9e5e 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -358,6 +358,7 @@ AC_FUNC_FSEEKO
+ 
+ AC_CHECK_FUNCS([openat fstatat unlinkat], [have_openat=yes], [have_openat=no])
+ AC_CHECK_FUNCS([ioperm iopl], [have_io=yes])
++AC_CHECK_FUNCS([open_memstream], [have_open_memstream=yes],[have_open_memstream=no])
+ 
+ AC_CHECK_MEMBER(struct sockaddr.sa_len,
+ 		AC_DEFINE_UNQUOTED(HAVE_SA_LEN,1,[Define if struct sockaddr contains sa_len]),,
+-- 
+2.20.1
+

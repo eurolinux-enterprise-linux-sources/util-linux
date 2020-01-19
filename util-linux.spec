@@ -2,7 +2,7 @@
 Summary: A collection of basic system utilities
 Name: util-linux
 Version: 2.23.2
-Release: 59%{?dist}.1
+Release: 61%{?dist}
 License: GPLv2 and GPLv2+ and LGPLv2+ and BSD with advertising and Public Domain
 Group: System Environment/Base
 URL: http://en.wikipedia.org/wiki/Util-linux
@@ -436,10 +436,23 @@ Patch177: 0177-mount-append-inverting-options-for-mount.-type-on-us.patch
 # 1616264 - Login to emergency shell failed
 Patch178: 0178-sulogin-backport-RHEL-8-version.patch
 
-# RHEL7.6.Z
+# RHEL7.7
 #
 # 1664752 - Bull (Atos) server lands up in invalid stty settings on the serial console after boot preventing login
 Patch179: 0179-agetty-backport-RHEL-8-version.patch
+# 1203378 - Cannot use swapon with fallocated XFS swapfile
+Patch180: 0180-swapon-mkswap-sync-man-page-with-upstream.patch
+# 1632944 - blkid/lsblk does not recognize exfat filesystem without a label
+Patch181: 0181-libblkid-zeroize-errno-on-blkid_probe_get_buffer-suc.patch
+# 1633657 - mount -a always tries to mount CIFS share subdir despite being already mounted
+Patch182: 0182-libmount-fix-mount-a-for-cifs.patch
+# 1639465 - Bad formatting in agetty.8 man page
+Patch183: 0183-agetty-fix-man-page-formatting.patch
+# 1667942 - libsmartcols: scols_print_table_to_string() doesn't work
+Patch184: 0184-build-sys-add-missing-open_memstream-test.patch
+# 1678451 - Unable to mount to a directory that matches a dm device under /dev
+Patch185: 0185-lib-canonicalize-make-DM-canonicalization-more-robus.patch
+
 
 %description
 The util-linux package contains a large variety of low-level system
@@ -1209,7 +1222,15 @@ fi
 %{_libdir}/pkgconfig/uuid.pc
 
 %changelog
-* Thu Jan 31 2019 Karel Zak <kzak@redhat.com> 2.23.2-59.el7_6.1
+* Fri Mar 22 2019 Karel Zak <kzak@redhat.com> 2.23.2-61
+- #1203378 - Cannot use swapon with fallocated XFS swapfile
+- #1632944 - blkid/lsblk does not recognize exfat filesystem without a label
+- #1633657 - mount -a always tries to mount CIFS share subdir despite being already mounted
+- #1639465 - Bad formatting in agetty.8 man page
+- #1667942 - libsmartcols: scols_print_table_to_string() doesn't work
+- #1678451 - Unable to mount to a directory that matches a dm device under /dev
+
+* Thu Jan 31 2019 Karel Zak <kzak@redhat.com> 2.23.2-60
 - fix #1664752 - Bull (Atos) server lands up in invalid stty settings on the serial console after boot preventing login
 
 * Mon Aug 20 2018 Karel Zak <kzak@redhat.com> 2.23.2-59
