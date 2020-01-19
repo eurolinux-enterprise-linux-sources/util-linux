@@ -1,0 +1,35 @@
+From c19feb058ff5883ab7255241d13732ab66bf44f0 Mon Sep 17 00:00:00 2001
+From: Andreas Henriksson <andreas@fatal.se>
+Date: Mon, 28 Nov 2016 17:24:49 +0100
+Subject: [PATCH 166/173] sulogin: make getpasswd(...) return NULL on ^D
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This makes the caller bail out early instead of evaluating the
+input as a password.
+
+Reported-by: Bjørn Mork <bjorn@mork.no>
+Addresses: http://bugs.debian.org/846112
+Upstream: http://github.com/karelzak/util-linux/commit/60dea9d187caa700e42f37c7955116f71be912d5
+Addresses: http://bugzilla.redhat.com/show_bug.cgi?id=1561200
+Signed-off-by: Andreas Henriksson <andreas@fatal.se>
+---
+ login-utils/sulogin.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/login-utils/sulogin.c b/login-utils/sulogin.c
+index a6918282e..7ec349953 100644
+--- a/login-utils/sulogin.c
++++ b/login-utils/sulogin.c
+@@ -661,6 +661,7 @@ static char *getpasswd(struct console *con)
+ 				ptr--;
+ 			break;
+ 		case CEOF:
++			ret = NULL;
+ 			goto quit;
+ 		default:
+ 			if ((size_t)(ptr - &pass[0]) >= (sizeof(pass) -1 )) {
+-- 
+2.14.4
+

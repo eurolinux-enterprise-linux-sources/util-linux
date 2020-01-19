@@ -1,0 +1,175 @@
+From a08c1a6aadaa27e4070fe58242d55464d6c7a3e7 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Mon, 25 May 2015 15:30:52 +0200
+Subject: [PATCH 164/173] sulogin: improve support for locked root account
+
+Some installations and distributions don't use a root account password
+for security reasons and use sudo instead. In that case, asking for the
+password makes no sense, and it is not even considered as valid as it's just
+"*" or "!".
+
+In these cases --force is required to just start a root shell and no
+ask for password.
+
+I don't think it's a good idea to automatically start root shell when
+locked account is detected. It's possible that the machine is on
+public place and for example Ubuntu uses root account disabled by
+default (and also Fedora when installed by yum/dnf without anaconda).
+
+The --force option forces admins to think about it...
+
+The distro maintainers can also use --force in their initscripts or
+systemd emergency.service if they believe that promiscuous setting is
+the right thing for the distro.
+
+Addresses: https://bugs.debian.org/326678
+Addresses: http://bugzilla.redhat.com/show_bug.cgi?id=1561200
+Upstream: http://github.com/karelzak/util-linux/commit/7ff1162e67164cb4ece19dd809c26272461aa254
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ login-utils/sulogin.8 | 13 +++++++++----
+ login-utils/sulogin.c | 48 ++++++++++++++++++++++++++++++++++--------------
+ 2 files changed, 43 insertions(+), 18 deletions(-)
+
+diff --git a/login-utils/sulogin.8 b/login-utils/sulogin.8
+index b9dec165c..702487985 100644
+--- a/login-utils/sulogin.8
++++ b/login-utils/sulogin.8
+@@ -35,8 +35,10 @@ Give root password for system maintenance
+ .br
+ (or type Control\-D for normal startup):
+ .PP
+-.I sulogin
+-will be connected to the current terminal, or to the optional tty device that
++If the root account is locked and --force is specified, no password is required.
++.PP
++.B sulogin
++will be connected to the current terminal, or to the optional \fItty\fR device that
+ can be specified on the command line (typically
+ .BR /dev/console ).
+ .PP
+@@ -50,8 +52,11 @@ from the system fails, manually examine
+ .I /etc/passwd
+ and
+ .I /etc/shadow
+-to get the password.  If they are damaged or nonexistent, sulogin will start
+-a root shell without asking for a password.
++to get the password.  If these files are damaged or nonexistent, or when
++root account is locked by '!' or '*' at the begin of the password then
++.B sulogin
++will \fBstart a root shell without asking for a password\fP.
++.PP
+ .IP
+ Only use the
+ .B \-e
+diff --git a/login-utils/sulogin.c b/login-utils/sulogin.c
+index 6d03bc5ae..a17b91d71 100644
+--- a/login-utils/sulogin.c
++++ b/login-utils/sulogin.c
+@@ -81,6 +81,13 @@ static volatile sig_atomic_t sigchild;
+ # define IUCLC		0
+ #endif
+ 
++static int locked_account_password(const char *passwd)
++{
++	if (passwd && (*passwd == '*' || *passwd == '!'))
++		return 1;
++	return 0;
++}
++
+ /*
+  * Fix the tty modes and set reasonable defaults.
+  */
+@@ -423,7 +430,6 @@ static struct passwd *getrootpwent(int try_manually)
+ 		p = line;
+ 		break;
+ 	}
+-
+ 	fclose(fp);
+ 
+ 	/*
+@@ -460,7 +466,8 @@ static struct passwd *getrootpwent(int try_manually)
+ 		warnx(_("%s: no entry for root"), _PATH_SHADOW_PASSWD);
+ 		*pwd.pw_passwd = '\0';
+ 	}
+-	if (!valid(pwd.pw_passwd)) {
++	/* locked accont passwords are valid too */
++	if (!locked_account_password(pwd.pw_passwd) && !valid(pwd.pw_passwd)) {
+ 		warnx(_("%s: root password garbled"), _PATH_SHADOW_PASSWD);
+ 		*pwd.pw_passwd = '\0';
+ 	}
+@@ -470,7 +477,7 @@ static struct passwd *getrootpwent(int try_manually)
+ /*
+  * Ask by prompt for the password.
+  */
+-static void doprompt(const char *crypted, struct console *con)
++static void doprompt(const char *crypted, struct console *con, int deny)
+ {
+ 	struct termios tty;
+ 
+@@ -487,18 +494,25 @@ static void doprompt(const char *crypted, struct console *con)
+ 		if  ((con->file = fdopen(con->fd, "r+")) == (FILE*)0)
+ 			goto err;
+ 	}
++
++	if (deny)
++		fprintf(con->file, _("\nCannot open access to console, the root account is locked.\n"
++				     "See sulogin(8) man page for more details.\n\n"
++				     "Press Enter to continue.\n"));
++	else {
+ #if defined(USE_ONELINE)
+-	if (crypted[0])
+-		fprintf(con->file, _("Give root password for login: "));
+-	else
+-		fprintf(con->file, _("Press enter for login: "));
++		if (crypted[0] && !locked_account_password(crypted))
++			fprintf(con->file, _("Give root password for login: "));
++		else
++			fprintf(con->file, _("Press Enter for login: "));
+ #else
+-	if (crypted[0])
+-		fprintf(con->file, _("Give root password for maintenance\n"));
+-	else
+-		fprintf(con->file, _("Press enter for maintenance"));
+-	fprintf(con->file, _("(or type Control-D to continue): "));
++		if (crypted[0] && !locked_account_password(crypted))
++			fprintf(con->file, _("Give root password for maintenance\n"));
++		else
++			fprintf(con->file, _("Press Enter for maintenance\n"));
++		fprintf(con->file, _("(or press Control-D to continue): "));
+ #endif
++	}
+ 	fflush(con->file);
+ err:
+ 	if (con->flags & CON_SERIAL)
+@@ -914,6 +928,7 @@ int main(int argc, char **argv)
+ 		goto nofork;
+ 	}
+ 
++
+ 	mask_signal(SIGCHLD, chld_handler, &saved_sigchld);
+ 	do {
+ 		con = list_entry(ptr, struct console, entry);
+@@ -930,12 +945,17 @@ int main(int argc, char **argv)
+ 				const char *passwd = pwd->pw_passwd;
+ 				const char *answer;
+ 				int failed = 0, doshell = 0;
++				int deny = !opt_e && locked_account_password(pwd->pw_passwd);
++
++				doprompt(passwd, con, deny);
+ 
+-				doprompt(passwd, con);
+ 				if ((answer = getpasswd(con)) == NULL)
+ 					break;
++				if (deny)
++					exit(EXIT_FAILURE);
+ 
+-				if (passwd[0] == '\0')
++				/* no password or locked account */
++				if (!passwd[0] || locked_account_password(passwd))
+ 					doshell++;
+ 				else {
+ 					const char *cryptbuf;
+-- 
+2.14.4
+

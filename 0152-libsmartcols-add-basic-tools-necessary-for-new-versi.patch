@@ -1,0 +1,757 @@
+From c465ce9765273e8e1227b192e1917826ac4eaaf7 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Thu, 31 May 2018 11:13:31 +0200
+Subject: [PATCH 152/173] libsmartcols: add basic tools necessary for new
+ version
+
+Addresses: https://bugzilla.redhat.com/show_bug.cgi?id=1561350
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ configure.ac          |   3 +
+ include/carefulputc.h |  96 +++++++++++++++++++++++++++-
+ include/colors.h      |   5 ++
+ include/mbsalign.h    |   9 ++-
+ include/strutils.h    |  13 ++--
+ include/ttyutils.h    |   1 +
+ lib/Makemodule.am     |   1 +
+ lib/color-names.c     |  57 +++++++++++++++++
+ lib/mbsalign.c        | 172 +++++++++++++++++++++++++++++++++++++++++---------
+ lib/ttyutils.c        |  52 +++++++++++++++
+ libfdisk/src/ask.c    |   4 +-
+ 11 files changed, 373 insertions(+), 40 deletions(-)
+ create mode 100644 lib/color-names.c
+
+diff --git a/configure.ac b/configure.ac
+index d561e01d0..8cf317dc0 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -133,6 +133,9 @@ AC_SUBST([BSD_WARN_CFLAGS])
+ dnl libtool-2
+ LT_INIT
+ 
++dnl check supported linker flags
++AX_CHECK_VSCRIPT
++
+ m4_ifndef([PKG_PROG_PKG_CONFIG],
+   [m4_fatal([Could not locate the pkg-config autoconf
+     macros. These are usually located in /usr/share/aclocal/pkg.m4.
+diff --git a/include/carefulputc.h b/include/carefulputc.h
+index a54498cfd..613d94c1e 100644
+--- a/include/carefulputc.h
++++ b/include/carefulputc.h
+@@ -26,7 +26,87 @@ static inline int carefulputc(int c, FILE *fp) {
+ 	return (ret < 0) ? EOF : 0;
+ }
+ 
+-static inline void fputs_quoted(const char *data, FILE *out)
++/*
++ * Backported for RHEL7.6 libsmartcols
++ */
++
++/*
++ * Requirements enumerated via testing (V8, Firefox, IE11):
++ *
++ * var charsToEscape = [];
++ * for (var i = 0; i < 65535; i += 1) {
++ *	try {
++ *		JSON.parse('{"sample": "' + String.fromCodePoint(i) + '"}');
++ *	} catch (e) {
++ *		charsToEscape.push(i);
++ *	}
++ * }
++ */
++static inline void fputs_quoted_case_json(const char *data, FILE *out, int dir)
++{
++	const char *p;
++
++	fputc('"', out);
++	for (p = data; p && *p; p++) {
++
++		const unsigned char c = (unsigned char) *p;
++
++		/* From http://www.json.org
++		 *
++		 * The double-quote and backslashes would break out a string or
++		 * init an escape sequence if not escaped.
++		 *
++		 * Note that single-quotes and forward slashes, while they're
++		 * in the JSON spec, don't break double-quoted strings.
++		 */
++		if (c == '"' || c == '\\') {
++			fputc('\\', out);
++			fputc(c, out);
++			continue;
++		}
++
++		/* All non-control characters OK; do the case swap as required. */
++		if (c >= 0x20) {
++			fputc(dir ==  1 ? toupper(c) :
++			      dir == -1 ? tolower(c) : *p, out);
++			continue;
++		}
++
++		/* In addition, all chars under ' ' break Node's/V8/Chrome's, and
++		 * Firefox's JSON.parse function
++		 */
++		switch (c) {
++			/* Handle short-hand cases to reduce output size.  C
++			 * has most of the same stuff here, so if there's an
++			 * "Escape for C" function somewhere in the STL, we
++			 * should probably be using it.
++			 */
++			case '\b':
++				fputs("\\b", out);
++				break;
++			case '\t':
++				fputs("\\t", out);
++				break;
++			case '\n':
++				fputs("\\n", out);
++				break;
++			case '\f':
++				fputs("\\f", out);
++				break;
++			case '\r':
++				fputs("\\r", out);
++				break;
++			default:
++				/* Other assorted control characters */
++				fprintf(out, "\\u00%02x", c);
++				break;
++		}
++	}
++	fputc('"', out);
++}
++
++
++static inline void fputs_quoted_case(const char *data, FILE *out, int dir)
+ {
+ 	const char *p;
+ 
+@@ -34,16 +114,28 @@ static inline void fputs_quoted(const char *data, FILE *out)
+ 	for (p = data; p && *p; p++) {
+ 		if ((unsigned char) *p == 0x22 ||		/* " */
+ 		    (unsigned char) *p == 0x5c ||		/* \ */
++		    (unsigned char) *p == 0x60 ||		/* ` */
++		    (unsigned char) *p == 0x24 ||		/* $ */
+ 		    !isprint((unsigned char) *p) ||
+ 		    iscntrl((unsigned char) *p)) {
+ 
+ 			fprintf(out, "\\x%02x", (unsigned char) *p);
+ 		} else
+-			fputc(*p, out);
++			fputc(dir ==  1 ? toupper(*p) :
++			      dir == -1 ? tolower(*p) :
++			      *p, out);
+ 	}
+ 	fputc('"', out);
+ }
+ 
++#define fputs_quoted(_d, _o)		fputs_quoted_case(_d, _o, 0)
++#define fputs_quoted_upper(_d, _o)	fputs_quoted_case(_d, _o, 1)
++#define fputs_quoted_lower(_d, _o)	fputs_quoted_case(_d, _o, -1)
++
++#define fputs_quoted_json(_d, _o)       fputs_quoted_case_json(_d, _o, 0)
++#define fputs_quoted_json_upper(_d, _o) fputs_quoted_case_json(_d, _o, 1)
++#define fputs_quoted_json_lower(_d, _o) fputs_quoted_case_json(_d, _o, -1)
++
+ static inline void fputs_nonblank(const char *data, FILE *out)
+ {
+ 	const char *p;
+diff --git a/include/colors.h b/include/colors.h
+index dd77bf6df..39c0edf46 100644
+--- a/include/colors.h
++++ b/include/colors.h
+@@ -38,6 +38,11 @@
+ 
+ #define UL_COLOR_WHITE		"\033[1;37m"
+ 
++/* maximal length of human readable name of ESC seq. */
++#define UL_COLORNAME_MAXSZ      32
++
++extern const char *color_sequence_from_colorname(const char *str);
++
+ /* Initialize the global variable OUT_IS_TERM */
+ extern int colors_init(void);
+ 
+diff --git a/include/mbsalign.h b/include/mbsalign.h
+index 5eaf606e5..0c28e6f69 100644
+--- a/include/mbsalign.h
++++ b/include/mbsalign.h
+@@ -46,11 +46,18 @@ extern size_t mbsalign (const char *src, char *dest,
+ 			size_t dest_size,  size_t *width,
+ 			mbs_align_t align, int flags);
+ 
++extern size_t mbsalign_with_padding (const char *src, char *dest, size_t dest_size,
++	               size_t *width, mbs_align_t align, int flags,
++		       int padchar);
++
+ extern size_t mbs_safe_nwidth(const char *buf, size_t bufsz, size_t *sz);
+ extern size_t mbs_safe_width(const char *s);
+ 
+ extern char *mbs_safe_encode(const char *s, size_t *width);
+-extern char *mbs_safe_encode_to_buffer(const char *s, size_t *width, char *buf);
++extern char *mbs_safe_encode_to_buffer(const char *s, size_t *width, char *buf, const char *safechars);
+ extern size_t mbs_safe_encode_size(size_t bytes);
+ 
++extern char *mbs_invalid_encode(const char *s, size_t *width);
++extern char *mbs_invalid_encode_to_buffer(const char *s, size_t *width, char *buf);
++
+ #endif /* UTIL_LINUX_MBSALIGN_H */
+diff --git a/include/strutils.h b/include/strutils.h
+index 1f028e4ed..822fb7d49 100644
+--- a/include/strutils.h
++++ b/include/strutils.h
+@@ -6,6 +6,7 @@
+ #include <string.h>
+ #include <sys/types.h>
+ #include <stdio.h>
++#include <errno.h>
+ 
+ /* default strtoxx_or_err() exit code */
+ #ifndef STRTOXX_EXIT_CODE
+@@ -57,20 +58,24 @@ static inline void xstrncpy(char *dest, const char *src, size_t n)
+ 	dest[n-1] = 0;
+ }
+ 
+-static inline char *strdup_to_offset(void *stru, size_t offset, const char *str)
++static inline int strdup_to_offset(void *stru, size_t offset, const char *str)
+ {
+ 	char *n = NULL;
+-	char **o = (char **) ((char *) stru + offset);
++	char **o;
+ 
++	if (!stru)
++		return -EINVAL;
++
++	o = (char **) ((char *) stru + offset);
+ 	if (str) {
+ 		n = strdup(str);
+ 		if (!n)
+-			return NULL;
++			return -ENOMEM;
+ 	}
+ 
+ 	free(*o);
+ 	*o = n;
+-	return n;
++	return 0;
+ }
+ 
+ #define strdup_to_struct_member(_s, _m, _str) \
+diff --git a/include/ttyutils.h b/include/ttyutils.h
+index 13495ba96..47fe34472 100644
+--- a/include/ttyutils.h
++++ b/include/ttyutils.h
+@@ -47,6 +47,7 @@ struct chardata {
+ 	        (ptr)->capslock = 0;         \
+ 	} while (0)
+ 
++extern int get_terminal_dimension(int *cols, int *lines);
+ extern int get_terminal_width(void);
+ extern int get_terminal_name(int fd, const char **path, const char **name,
+ 			     const char **number);
+diff --git a/lib/Makemodule.am b/lib/Makemodule.am
+index acae27afb..714233c40 100644
+--- a/lib/Makemodule.am
++++ b/lib/Makemodule.am
+@@ -6,6 +6,7 @@ libcommon_la_SOURCES = \
+ 	lib/blkdev.c \
+ 	lib/canonicalize.c \
+ 	lib/colors.c \
++	lib/color-names.c \
+ 	lib/crc32.c \
+ 	lib/env.c \
+ 	lib/idcache.c \
+diff --git a/lib/color-names.c b/lib/color-names.c
+new file mode 100644
+index 000000000..cf37670a9
+--- /dev/null
++++ b/lib/color-names.c
+@@ -0,0 +1,57 @@
++
++#include "c.h"
++#include "colors.h"
++
++struct ul_color_name {
++	const char *name;
++	const char *seq;
++};
++
++/*
++ * qsort/bsearch buddy
++ */
++static int cmp_color_name(const void *a0, const void *b0)
++{
++	struct ul_color_name	*a = (struct ul_color_name *) a0,
++				*b = (struct ul_color_name *) b0;
++	return strcmp(a->name, b->name);
++}
++
++/*
++ * Maintains human readable color names
++ */
++const char *color_sequence_from_colorname(const char *str)
++{
++	static const struct ul_color_name basic_schemes[] = {
++		{ "black",	UL_COLOR_BLACK           },
++		{ "blink",      UL_COLOR_BLINK           },
++		{ "blue",	UL_COLOR_BLUE            },
++		{ "bold",       UL_COLOR_BOLD		 },
++		{ "brown",	UL_COLOR_BROWN           },
++		{ "cyan",	UL_COLOR_CYAN            },
++		{ "darkgray",	UL_COLOR_DARK_GRAY       },
++		{ "gray",	UL_COLOR_GRAY            },
++		{ "green",	UL_COLOR_GREEN           },
++		{ "halfbright", UL_COLOR_HALFBRIGHT	 },
++		{ "lightblue",	UL_COLOR_BOLD_BLUE       },
++		{ "lightcyan",	UL_COLOR_BOLD_CYAN       },
++		{ "lightgray,",	UL_COLOR_GRAY            },
++		{ "lightgreen", UL_COLOR_BOLD_GREEN      },
++		{ "lightmagenta", UL_COLOR_BOLD_MAGENTA  },
++		{ "lightred",	UL_COLOR_BOLD_RED        },
++		{ "magenta",	UL_COLOR_MAGENTA         },
++		{ "red",	UL_COLOR_RED             },
++		{ "reset",      UL_COLOR_RESET,          },
++		{ "reverse",    UL_COLOR_REVERSE         },
++		{ "yellow",	UL_COLOR_BOLD_YELLOW     },
++	};
++	struct ul_color_name key = { .name = (char *) str }, *res;
++
++	if (!str)
++		return NULL;
++
++	res = bsearch(&key, basic_schemes, ARRAY_SIZE(basic_schemes),
++				sizeof(struct ul_color_name),
++				cmp_color_name);
++	return res ? res->seq : NULL;
++}
+diff --git a/lib/mbsalign.c b/lib/mbsalign.c
+index b307d19f7..8fdab9ee9 100644
+--- a/lib/mbsalign.c
++++ b/lib/mbsalign.c
+@@ -27,9 +27,9 @@
+ 
+ #include "c.h"
+ #include "mbsalign.h"
++#include "strutils.h"
+ #include "widechar.h"
+ 
+-#ifdef HAVE_WIDECHAR
+ /* Replace non printable chars.
+    Note \t and \n etc. are non printable.
+    Return 1 if replacement made, 0 otherwise.  */
+@@ -43,17 +43,19 @@
+  */
+ size_t mbs_safe_nwidth(const char *buf, size_t bufsz, size_t *sz)
+ {
+-	mbstate_t st;
+ 	const char *p = buf, *last = buf;
+ 	size_t width = 0, bytes = 0;
+ 
++#ifdef HAVE_WIDECHAR
++	mbstate_t st;
+ 	memset(&st, 0, sizeof(st));
+-
++#endif
+ 	if (p && *p && bufsz)
+ 		last = p + (bufsz - 1);
+ 
+ 	while (p && *p && p <= last) {
+-		if (iscntrl((unsigned char) *p)) {
++		if ((p < last && *p == '\\' && *(p + 1) == 'x')
++		    || iscntrl((unsigned char) *p)) {
+ 			width += 4, bytes += 4;		/* *p encoded to \x?? */
+ 			p++;
+ 		}
+@@ -106,28 +108,36 @@ size_t mbs_safe_width(const char *s)
+ 
+ /*
+  * Copy @s to @buf and replace control and non-printable chars with
+- * \x?? hex sequence. The @width returns number of cells.
++ * \x?? hex sequence. The @width returns number of cells. The @safechars
++ * are not encoded.
+  *
+  * The @buf has to be big enough to store mbs_safe_encode_size(strlen(s)))
+  * bytes.
+  */
+-char *mbs_safe_encode_to_buffer(const char *s, size_t *width, char *buf)
++char *mbs_safe_encode_to_buffer(const char *s, size_t *width, char *buf, const char *safechars)
+ {
+-	mbstate_t st;
+ 	const char *p = s;
+ 	char *r;
+ 	size_t sz = s ? strlen(s) : 0;
+ 
++#ifdef HAVE_WIDECHAR
++	mbstate_t st;
++	memset(&st, 0, sizeof(st));
++#endif
+ 	if (!sz || !buf)
+ 		return NULL;
+ 
+-	memset(&st, 0, sizeof(st));
+-
+ 	r = buf;
+ 	*width = 0;
+ 
+ 	while (p && *p) {
+-		if (iscntrl((unsigned char) *p)) {
++		if (safechars && strchr(safechars, *p)) {
++			*r++ = *p++;
++			continue;
++		}
++
++		if ((*p == '\\' && *(p + 1) == 'x')
++		    || iscntrl((unsigned char) *p)) {
+ 			sprintf(r, "\\x%02x", (unsigned char) *p);
+ 			r += 4;
+ 			*width += 4;
+@@ -152,13 +162,13 @@ char *mbs_safe_encode_to_buffer(const char *s, size_t *width, char *buf)
+ 					r += 4;
+ 					*width += 4;
+ 				} else {
+-					width++;
++					(*width)++;
+ 					*r++ = *p;
+ 				}
+ 			} else if (!iswprint(wc)) {
+ 				size_t i;
+ 				for (i = 0; i < len; i++) {
+-					sprintf(r, "\\x%02x", (unsigned char) *p);
++					sprintf(r, "\\x%02x", (unsigned char) p[i]);
+ 					r += 4;
+ 					*width += 4;
+ 				}
+@@ -177,13 +187,76 @@ char *mbs_safe_encode_to_buffer(const char *s, size_t *width, char *buf)
+ 			*width += 4;
+ 		} else {
+ 			*r++ = *p++;
+-			*width++;
++			(*width)++;
+ 		}
+ #endif
+ 	}
+ 
+ 	*r = '\0';
++	return buf;
++}
+ 
++/*
++ * Copy @s to @buf and replace broken sequences to \x?? hex sequence. The
++ * @width returns number of cells. The @safechars are not encoded.
++ *
++ * The @buf has to be big enough to store mbs_safe_encode_size(strlen(s)))
++ * bytes.
++ */
++char *mbs_invalid_encode_to_buffer(const char *s, size_t *width, char *buf)
++{
++	const char *p = s;
++	char *r;
++	size_t sz = s ? strlen(s) : 0;
++
++#ifdef HAVE_WIDECHAR
++	mbstate_t st;
++	memset(&st, 0, sizeof(st));
++#endif
++	if (!sz || !buf)
++		return NULL;
++
++	r = buf;
++	*width = 0;
++
++	while (p && *p) {
++#ifdef HAVE_WIDECHAR
++		wchar_t wc;
++		size_t len = mbrtowc(&wc, p, MB_CUR_MAX, &st);
++#else
++		size_t len = 1;
++#endif
++
++		if (len == 0)
++			break;		/* end of string */
++
++		if (len == (size_t) -1 || len == (size_t) -2) {
++			len = 1;
++			/*
++			 * Not valid multibyte sequence -- maybe it's
++			 * printable char according to the current locales.
++			 */
++			if (!isprint((unsigned char) *p)) {
++				sprintf(r, "\\x%02x", (unsigned char) *p);
++				r += 4;
++				*width += 4;
++			} else {
++				(*width)++;
++				*r++ = *p;
++			}
++		} else if (*p == '\\' && *(p + 1) == 'x') {
++			sprintf(r, "\\x%02x", (unsigned char) *p);
++			r += 4;
++			*width += 4;
++		} else {
++			memcpy(r, p, len);
++			r += len;
++			*width += wcwidth(wc);
++		}
++		p += len;
++	}
++
++	*r = '\0';
+ 	return buf;
+ }
+ 
+@@ -199,17 +272,39 @@ size_t mbs_safe_encode_size(size_t bytes)
+ char *mbs_safe_encode(const char *s, size_t *width)
+ {
+ 	size_t sz = s ? strlen(s) : 0;
+-	char *buf;
++	char *buf, *ret = NULL;
+ 
+ 	if (!sz)
+ 		return NULL;
+ 	buf = malloc(mbs_safe_encode_size(sz));
+-	if (!buf)
+-		return NULL;
++	if (buf)
++		ret = mbs_safe_encode_to_buffer(s, width, buf, NULL);
++	if (!ret)
++		free(buf);
++	return ret;
++}
+ 
+-	return mbs_safe_encode_to_buffer(s, width, buf);
++/*
++ * Returns allocated string where all broken widechars chars are
++ * replaced with \x?? hex sequence.
++ */
++char *mbs_invalid_encode(const char *s, size_t *width)
++{
++	size_t sz = s ? strlen(s) : 0;
++	char *buf, *ret = NULL;
++
++	if (!sz)
++		return NULL;
++	buf = malloc(mbs_safe_encode_size(sz));
++	if (buf)
++		ret = mbs_invalid_encode_to_buffer(s, width, buf);
++	if (!ret)
++		free(buf);
++	return ret;
+ }
+ 
++#ifdef HAVE_WIDECHAR
++
+ static bool
+ wc_ensure_printable (wchar_t *wchars)
+ {
+@@ -246,6 +341,7 @@ wc_truncate (wchar_t *wc, size_t width)
+         }
+       if (cells + next_cells > width)
+         break;
++
+       cells += next_cells;
+       wc++;
+     }
+@@ -273,7 +369,7 @@ rpl_wcswidth (const wchar_t *s, size_t n)
+ 
+   return ret;
+ }
+-#endif
++#endif /* HAVE_WIDECHAR */
+ 
+ /* Truncate multi-byte string to @width and returns number of
+  * bytes of the new string @str, and in @width returns number
+@@ -290,7 +386,7 @@ mbs_truncate(char *str, size_t *width)
+ 	if (sz == (ssize_t) -1)
+ 		goto done;
+ 
+-	wcs = malloc((sz + 1) * sizeof(wchar_t));
++	wcs = calloc(1, (sz + 1) * sizeof(wchar_t));
+ 	if (!wcs)
+ 		goto done;
+ 
+@@ -301,7 +397,7 @@ mbs_truncate(char *str, size_t *width)
+ done:
+ 	free(wcs);
+ #else
+-	if (*width < bytes)
++	if (bytes >= 0 && *width < (size_t) bytes)
+ 		bytes = *width;
+ #endif
+ 	if (bytes >= 0)
+@@ -315,16 +411,23 @@ done:
+    A pointer to the terminating NUL is returned.  */
+ 
+ static char*
+-mbs_align_pad (char *dest, const char* dest_end, size_t n_spaces)
++mbs_align_pad (char *dest, const char* dest_end, size_t n_spaces, int padchar)
+ {
+   /* FIXME: Should we pad with "figure space" (\u2007)
+      if non ascii data present?  */
+-  while (n_spaces-- && (dest < dest_end))
+-    *dest++ = ' ';
++  for (/* nothing */; n_spaces && (dest < dest_end); n_spaces--)
++    *dest++ = padchar;
+   *dest = '\0';
+   return dest;
+ }
+ 
++size_t
++mbsalign (const char *src, char *dest, size_t dest_size,
++          size_t *width, mbs_align_t align, int flags)
++{
++	return mbsalign_with_padding(src, dest, dest_size, width, align, flags, ' ');
++}
++
+ /* Align a string, SRC, in a field of *WIDTH columns, handling multi-byte
+    characters; write the result into the DEST_SIZE-byte buffer, DEST.
+    ALIGNMENT specifies whether to left- or right-justify or to center.
+@@ -339,8 +442,14 @@ mbs_align_pad (char *dest, const char* dest_end, size_t n_spaces)
+    Update *WIDTH to indicate how many columns were used before padding.  */
+ 
+ size_t
+-mbsalign (const char *src, char *dest, size_t dest_size,
+-          size_t *width, mbs_align_t align, int flags)
++mbsalign_with_padding (const char *src, char *dest, size_t dest_size,
++	               size_t *width, mbs_align_t align,
++#ifdef HAVE_WIDECHAR
++		       int flags,
++#else
++		       int flags __attribute__((__unused__)),
++#endif
++		       int padchar)
+ {
+   size_t ret = -1;
+   size_t src_size = strlen (src) + 1;
+@@ -350,10 +459,11 @@ mbsalign (const char *src, char *dest, size_t dest_size,
+   size_t n_cols = src_size - 1;
+   size_t n_used_bytes = n_cols; /* Not including NUL */
+   size_t n_spaces = 0, space_left;
++
++#ifdef HAVE_WIDECHAR
+   bool conversion = false;
+   bool wc_enabled = false;
+ 
+-#ifdef HAVE_WIDECHAR
+   /* In multi-byte locales convert to wide characters
+      to allow easy truncation. Also determine number
+      of screen columns used.  */
+@@ -407,9 +517,9 @@ mbsalign (const char *src, char *dest, size_t dest_size,
+         n_cols = wc_truncate (str_wc, *width);
+         n_used_bytes = wcstombs (newstr, str_wc, src_size);
+     }
+-#endif
+ 
+ mbsalign_unibyte:
++#endif
+ 
+   if (n_cols > *width) /* Unibyte truncation required.  */
+     {
+@@ -451,14 +561,14 @@ mbsalign_unibyte:
+ 	  abort();
+         }
+ 
+-      dest = mbs_align_pad (dest, dest_end, start_spaces);
++      dest = mbs_align_pad (dest, dest_end, start_spaces, padchar);
+       space_left = dest_end - dest;
+       dest = mempcpy (dest, str_to_print, min (n_used_bytes, space_left));
+-      mbs_align_pad (dest, dest_end, end_spaces);
++      mbs_align_pad (dest, dest_end, end_spaces, padchar);
+     }
+-
++#ifdef HAVE_WIDECHAR
+ mbsalign_cleanup:
+-
++#endif
+   free (str_wc);
+   free (newstr);
+ 
+diff --git a/lib/ttyutils.c b/lib/ttyutils.c
+index ea551e26c..91497e763 100644
+--- a/lib/ttyutils.c
++++ b/lib/ttyutils.c
+@@ -9,6 +9,58 @@
+ #include "c.h"
+ #include "ttyutils.h"
+ 
++/*
++ * Backported for RHEL7.6 libsmartcols
++ */
++static int get_env_int(const char *name)
++{
++	const char *cp = getenv(name);
++
++	if (cp) {
++		char *end = NULL;
++		long x;
++
++		errno = 0;
++		x = strtol(cp, &end, 10);
++
++		if (errno == 0 && end && *end == '\0' && end > cp &&
++		    x > 0 && x <= INT_MAX)
++			return x;
++	}
++
++	return -1;
++}
++
++int get_terminal_dimension(int *cols, int *lines)
++{
++	int c = 0, l = 0;
++
++#if defined(TIOCGWINSZ)
++	struct winsize	w_win;
++	if (ioctl (STDOUT_FILENO, TIOCGWINSZ, &w_win) == 0) {
++		c = w_win.ws_col;
++		l = w_win.ws_row;
++	}
++#elif defined(TIOCGSIZE)
++	struct ttysize	t_win;
++	if (ioctl (STDOUT_FILENO, TIOCGSIZE, &t_win) == 0) {
++		c = t_win.ts_cols;
++		l = t_win.ts_lines;
++	}
++#endif
++
++	if (cols && c <= 0)
++		c = get_env_int("COLUMNS");
++	if (lines && l <= 0)
++		l = get_env_int("LINES");
++
++	if (cols)
++		*cols = c;
++	if (lines)
++		*lines = l;
++	return 0;
++}
++
+ int get_terminal_width(void)
+ {
+ #ifdef TIOCGSIZE
+diff --git a/libfdisk/src/ask.c b/libfdisk/src/ask.c
+index cdb4d0124..a10f3dc82 100644
+--- a/libfdisk/src/ask.c
++++ b/libfdisk/src/ask.c
+@@ -42,7 +42,7 @@ const char *fdisk_ask_get_query(struct fdisk_ask *ask)
+ int fdisk_ask_set_query(struct fdisk_ask *ask, const char *str)
+ {
+ 	assert(ask);
+-	return !strdup_to_struct_member(ask, query, str) ? -ENOMEM : 0;
++	return strdup_to_struct_member(ask, query, str);
+ }
+ 
+ int fdisk_ask_get_type(struct fdisk_ask *ask)
+@@ -90,7 +90,7 @@ const char *fdisk_ask_number_get_range(struct fdisk_ask *ask)
+ int fdisk_ask_number_set_range(struct fdisk_ask *ask, const char *range)
+ {
+ 	assert(ask);
+-	return !strdup_to_struct_member(ask, data.num.range, range) ? -ENOMEM : 0;
++	return strdup_to_struct_member(ask, data.num.range, range);
+ }
+ 
+ uint64_t fdisk_ask_number_get_default(struct fdisk_ask *ask)
+-- 
+2.14.4
+

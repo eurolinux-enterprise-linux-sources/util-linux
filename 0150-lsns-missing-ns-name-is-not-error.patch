@@ -1,0 +1,44 @@
+From 8694f63002c6b765e72c36fbf8ed46164d5303e5 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Mon, 15 Aug 2016 11:02:18 +0200
+Subject: [PATCH 150/173] lsns: missing ns/<name> is not error
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+For example user namespace is optional it does not make sense to
+ignore process completely if the ns/user file is missing.
+
+Reported-by: Michał Bartoszkiewicz <mbartoszkiewicz@gmail.com>
+Upstream: http://github.com/karelzak/util-linux/commit/3082f8518f2739e9f68e660f1749acdd2b9d7a97
+Addresses: https://bugzilla.redhat.com/show_bug.cgi?id=1543428
+Signed-off-by: Karel Zak <kzak@redhat.com>
+---
+ sys-utils/lsns.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/sys-utils/lsns.c b/sys-utils/lsns.c
+index fb53a16a4..b8841b7a3 100644
+--- a/sys-utils/lsns.c
++++ b/sys-utils/lsns.c
+@@ -204,7 +204,7 @@ static inline const struct colinfo *get_column_info(unsigned num)
+ 	return &infos[ get_column_id(num) ];
+ }
+ 
+-static ino_t get_ns_ino(int dir, const char *nsname, ino_t *ino)
++static int get_ns_ino(int dir, const char *nsname, ino_t *ino)
+ {
+ 	struct stat st;
+ 	char path[16];
+@@ -269,7 +269,7 @@ static int read_process(struct lsns *ls, pid_t pid)
+ 			continue;
+ 
+ 		rc = get_ns_ino(dirfd(dir), ns_names[i], &p->ns_ids[i]);
+-		if (rc && rc != -EACCES)
++		if (rc && rc != -EACCES && rc != -ENOENT)
+ 			goto done;
+ 		rc = 0;
+ 	}
+-- 
+2.14.4
+
