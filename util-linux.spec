@@ -2,7 +2,7 @@
 Summary: A collection of basic system utilities
 Name: util-linux
 Version: 2.23.2
-Release: 61%{?dist}
+Release: 61%{?dist}.1
 License: GPLv2 and GPLv2+ and LGPLv2+ and BSD with advertising and Public Domain
 Group: System Environment/Base
 URL: http://en.wikipedia.org/wiki/Util-linux
@@ -452,6 +452,11 @@ Patch183: 0183-agetty-fix-man-page-formatting.patch
 Patch184: 0184-build-sys-add-missing-open_memstream-test.patch
 # 1678451 - Unable to mount to a directory that matches a dm device under /dev
 Patch185: 0185-lib-canonicalize-make-DM-canonicalization-more-robus.patch
+
+# RHEL7.7.Z
+#
+# 1712768 - lsmem segfaults on ppc64 wih -o
+Patch186: 0186-misc-cleanup-size_t-vs.-int-for-string_add_to_idarra.patch
 
 
 %description
@@ -1222,6 +1227,9 @@ fi
 %{_libdir}/pkgconfig/uuid.pc
 
 %changelog
+* Tue Oct 29 2019 Karel Zak <kzak@redhat.com> 2.23.2-61.el7_7.1
+- fix #1712768 - lsmem segfaults on ppc64 wih -o
+
 * Fri Mar 22 2019 Karel Zak <kzak@redhat.com> 2.23.2-61
 - #1203378 - Cannot use swapon with fallocated XFS swapfile
 - #1632944 - blkid/lsblk does not recognize exfat filesystem without a label
